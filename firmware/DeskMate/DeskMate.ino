@@ -1,3 +1,4 @@
+#include <WiFi.h>
 #include "Config.h"
 #include "Cards.h"
 #include "DisplayUI.h"
@@ -12,6 +13,8 @@ static int currentCard = 0;
 static unsigned long lastCardChangeMs = 0;
 static DeviceMode mode = MODE_CARDS;
 static bool nightModeActive = false;
+static unsigned long lastWifiCheckMs = 0;
+#define WIFI_RECONNECT_CHECK_MS 10000UL
 
 // Funnels every card change (manual, remote, or carousel) through one
 // place so the beep and the carousel timer stay consistent regardless of
@@ -58,7 +61,7 @@ void setup() {
   initEncoder();
   initDisplay();
 
-  syncTime();  // brief, bounded attempt - falls back gracefully if it fails
+  syncTime();  // bounded attempt; leaves WiFi connected either way if it succeeds
 
   // Card 0 is the clock - only meaningful once syncTime() actually landed a
   // real timestamp this boot. Offline (or sync failed), land on card 1
@@ -66,6 +69,10 @@ void setup() {
   currentCard = isTimeSynced() ? 0 : 1;
   showCard(currentCard);
   lastCardChangeMs = millis();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    beginRemoteControl();
+  }
 }
 
 void loop() {
@@ -118,7 +125,22 @@ void loop() {
     }
   }
 
-  pollRemoteControl(currentCard, nightModeActive, mode == MODE_GAME);
+  // WiFi is meant to stay connected permanently now (USB-powered), but a
+  // router restart or signal drop can still knock it out mid-runtime -
+  // check occasionally and reconnect rather than staying offline until
+  // the next reboot. Also covers the boot-time case where WiFi wasn't up
+  // yet when setup() tried to start remote control.
+  unsigned long now = millis();
+  if (now - lastWifiCheckMs >= WIFI_RECONNECT_CHECK_MS) {
+    lastWifiCheckMs = now;
+    if (WiFi.status() != WL_CONNECTED) {
+      WiFi.reconnect();
+    } else {
+      beginRemoteControl();  // no-op once already started
+    }
+  }
+
+  loopRemoteControl(currentCard, nightModeActive, mode == MODE_GAME);
 
   // Edge-triggered on the site's stored value actually changing, so a
   // local button toggle isn't immediately re-fought by an unchanged

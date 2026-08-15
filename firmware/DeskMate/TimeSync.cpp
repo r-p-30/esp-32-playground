@@ -140,9 +140,10 @@ void syncTime() {
     Serial.println("WiFi connect timed out - continuing offline.");
   }
 
-  // Phase 1 only needs a brief connection at boot, per the plan - drop it
-  // afterwards rather than staying associated for no reason.
-  disconnectWiFi();
+  // Deliberately left connected (unlike the old battery-conscious Phase 1
+  // behavior) - the device is USB-powered now, and RemoteControl.cpp holds
+  // a permanent WebSocket connection over this same WiFi session for the
+  // rest of the device's runtime. See DeskMate.ino's setup().
 }
 
 bool isTimeSynced() {

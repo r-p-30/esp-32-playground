@@ -23,7 +23,9 @@
 // ---- WiFi / NTP (Phase 1) ----
 // How long the boot-time fast path (reconnect via NVS-stored credentials -
 // see connectWiFiAtBootWithSetupFallback() in WifiUtil.cpp) waits before
-// giving up and falling to the setup portal below.
+// giving up and falling to the setup portal below. WiFi stays connected
+// for the device's entire runtime after this (USB-powered, no battery
+// reason to drop it) - see DeskMate.ino and RemoteControl.cpp.
 #define WIFI_CONNECT_TIMEOUT_MS  5000UL
 
 // ---- WiFi setup portal (Phase 2 - WiFiManager) ----
@@ -43,10 +45,9 @@
 
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----
-// How often the device checks in with the hosted endpoint. Each check-in
-// is a brief WiFi connect + HTTPS request + disconnect (same pattern as
-// the boot-time NTP sync) - longer interval = better battery life once
-// running on the AA pack, shorter = a remote card change/buzz feels more
-// "live." 60s is a reasonable starting point; tune once you've seen real
-// battery drain.
-#define REMOTE_POLL_INTERVAL_MS  60000UL
+// The device holds one permanent WebSocket connection to the hosted site
+// (see RemoteControl.cpp) - state changes push instantly, no polling
+// delay. This just controls how often a small "I'm alive" status message
+// goes out over that same connection, purely for the site's "last seen"
+// display - doesn't affect how fast buzzes/card changes/etc. arrive.
+#define REMOTE_HEARTBEAT_INTERVAL_MS  30000UL

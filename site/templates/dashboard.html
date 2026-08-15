@@ -3,6 +3,13 @@
 {% block content %}
 
 <section class="card status-line">
+  <p>
+    {% if device_connected %}
+      <strong class="conn-on">&#9679; Connected</strong>
+    {% else %}
+      <strong class="conn-off">&#9679; Not connected</strong>
+    {% endif %}
+  </p>
   {% if heartbeat %}
     <p><strong>Last seen:</strong> {{ last_seen_sec_ago }}s ago
       &middot; card {{ heartbeat.currentCard }}
@@ -10,7 +17,7 @@
       {% if heartbeat.gameMode %}&middot; game mode{% endif %}
       &middot; up {{ heartbeat.uptimeSec }}s</p>
   {% else %}
-    <p>No heartbeat received yet - device hasn't polled, or REMOTE_HEARTBEAT_URL isn't configured.</p>
+    <p>No heartbeat received yet - waiting on the device's first one after connecting.</p>
   {% endif %}
 </section>
 

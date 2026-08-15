@@ -1,14 +1,22 @@
 #pragma once
 
-// Polls the hosted state endpoint (see docs/remote-api-spec.md) on
-// a bounded interval (REMOTE_POLL_INTERVAL_MS in Config.h), and - if
-// RemoteApi.h's heartbeat URL is configured - POSTs a small status
-// heartbeat in the same WiFi session. Safe to call every loop()
-// iteration - internally rate-limited, and never blocks or breaks the
-// core card-cycling experience if WiFi or the endpoint is unavailable
-// (matches the plan's offline-first requirement). The three parameters
-// are only used to build the heartbeat body.
-void pollRemoteControl(int currentCard, bool nightModeActive, bool inGameMode);
+// Holds one permanent WebSocket connection to the hosted site (see
+// docs/remote-api-spec.md) instead of the old battery-conscious
+// poll/disconnect cycle - the device is USB-powered now, so WiFi and this
+// socket both just stay up for the device's entire runtime. The server
+// pushes a fresh state JSON the instant something changes on the site
+// (buzz, card edit, etc.) - no polling delay. Call beginRemoteControl()
+// once after WiFi connects (see DeskMate.ino's setup()), then
+// loopRemoteControl() every loop() iteration - both are safe no-ops if
+// RemoteApi.h still has its placeholder URL.
+void beginRemoteControl();
+
+// Pumps the WebSocket connection (processes incoming pushes, handles
+// reconnects) and sends a small periodic heartbeat over the same socket
+// so the site can show "last seen" (REMOTE_HEARTBEAT_INTERVAL_MS in
+// Config.h). Cheap and non-blocking - call every loop() iteration
+// regardless of WiFi state.
+void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode);
 
 // Returns the card index to jump to if a new remote update arrived since
 // the last call, otherwise -1. Each pending jump is returned exactly once,
@@ -27,8 +35,8 @@ bool consumeRemoteAnimationTrigger();
 // without touching any card content.
 bool consumeIdentifyPing();
 
-// Carousel state - reflects the *current* value from the last successful
-// poll (not revision-gated like the actions above, since this is an
+// Carousel state - reflects the *current* value from the last pushed
+// update (not revision-gated like the actions above, since this is an
 // ongoing setting rather than a one-time event).
 bool isCarouselEnabled();
 unsigned long getCarouselIntervalMs();
@@ -41,9 +49,9 @@ bool consumeRandomNotify();
 // Unlike carousel/randomNotify (which have no local competing control),
 // night mode and game mode can also be toggled by the physical button -
 // so these are edge-triggered on the *site's* value actually changing,
-// not blindly reasserted every poll. That way a local toggle sticks
+// not blindly reasserted every push. That way a local toggle sticks
 // until the site genuinely changes its stored value again, instead of
-// being fought every ~60s by a default that never moved. Returns 1 (on),
-// 0 (off), or -1 (no change since last call).
+// being fought by a default that never moved. Returns 1 (on), 0 (off),
+// or -1 (no change since last call).
 int consumeRemoteNightModeChange();
 int consumeRemoteGameModeChange();

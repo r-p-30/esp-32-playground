@@ -1,15 +1,18 @@
 # Desk Mate — Remote Control API Spec
 
-The device polls this endpoint every `REMOTE_POLL_INTERVAL_MS` (default 60s,
-see `Config.h`) while `RemoteApi.h` has real values in it. It's entirely
-optional — the device works fully offline if this is never set up.
+The device is USB-powered (no battery to conserve), so instead of
+periodically polling, it holds one permanent WebSocket connection to the
+hosted site for its entire runtime while `RemoteApi.h` has real values in
+it. It's entirely optional — the device works fully offline if this is
+never set up.
 
 ## Endpoint
 
-`GET <REMOTE_API_URL>` (set in `RemoteApi.h`, gitignored — see
-`RemoteApi.example.h` for the template)
+`wss://<host>/ws/device` (`REMOTE_API_URL` in `RemoteApi.h`, gitignored —
+see `RemoteApi.example.h` for the template)
 
-Header sent by the device on every request:
+The device connects once (right after WiFi comes up, see `DeskMate.ino`'s
+`setup()`) and sends this as an extra header on the WebSocket handshake:
 
 ```http
 X-Device-Key: <REMOTE_API_KEY>
@@ -17,9 +20,15 @@ X-Device-Key: <REMOTE_API_KEY>
 
 Check this server-side and reject anything that doesn't match, so a
 stranger who finds the URL can't remotely buzz the device or change what
-it shows.
+it shows. If the connection ever drops (network blip, server restart),
+the device automatically reconnects (`setReconnectInterval` in
+`RemoteControl.cpp`) - no action needed on the device side.
 
-## Response (JSON)
+Your server should push a text frame with the JSON below down this socket
+immediately on connect, and again any time something changes (a dashboard
+action, a card edit) - see "push, not poll" below.
+
+## Message (JSON, server → device)
 
 ```json
 {
@@ -99,7 +108,7 @@ Any subset of the above can be sent together in one update — e.g. bump
 or only `cardTextIndex`/`cardText` to silently edit a card's text without
 jumping to it or buzzing.
 
-### Continuous settings (applied from every successful poll, not tied to `revision`)
+### Continuous settings (applied from every pushed message, not tied to `revision`)
 
 - **`carouselEnabled`** (boolean, default false) — when true, the device
   auto-advances to the next card on its own, no knob input needed.
@@ -127,17 +136,17 @@ jumping to it or buzzing.
   (the actual game isn't built yet). Ignored while night mode is active.
 
 `carouselEnabled` and `randomNotifyEnabled` behave exactly as described
-above — the device just keeps applying whatever value came back on the
-last poll, so leaving them absent/false is a safe default.
+above — the device just keeps applying whatever value came in the last
+push, so leaving them absent/false is a safe default.
 
 **`nightModeEnabled` and `gameModeEnabled` behave differently, because
 they can also be toggled by the physical button:** the device only reacts
-when *your saved value itself changes* between polls, not to the value
+when *your saved value itself changes* between pushes, not to the value
 being persistently true. Concretely — if you set `nightModeEnabled: true`
 once, the device turns night mode on. If someone then long-presses
 to turn it back off locally, it **stays off** even though your database
 still has `nightModeEnabled: true` sitting in it, because nothing about
-your stored value changed on the next poll. To turn it on again
+your stored value changed on the next push. To turn it on again
 remotely, you have to actually write a new value (e.g. `false` then
 `true`, or just re-save with a slightly different flow) so the device
 sees a genuine transition. Plan your site's UI around this — a toggle
@@ -194,16 +203,12 @@ out of it.
 
 ## Heartbeat (device → site, optional)
 
-Everything above is one-directional (site → device). If `RemoteApi.h`'s
-`REMOTE_HEARTBEAT_URL` is filled in (left as the placeholder skips this
-entirely), the device also does this in the same WiFi session as its
-regular poll:
+The main state message above flows one direction (site → device). The
+device also sends a small heartbeat *back* over the same open socket
+every `REMOTE_HEARTBEAT_INTERVAL_MS` (default 30s, `Config.h`) as a text
+frame:
 
-```http
-POST <REMOTE_HEARTBEAT_URL>
-X-Device-Key: <REMOTE_API_KEY>
-Content-Type: application/json
-
+```json
 {"currentCard":0,"nightMode":false,"gameMode":false,"uptimeSec":184320}
 ```
 
@@ -215,31 +220,42 @@ Content-Type: application/json
 - `uptimeSec` — seconds since last boot (resets to a small number if the
   device loses power/resets).
 
-The device doesn't read or care about the response — this is fire-and-
-forget, so your endpoint just needs to accept the POST and return
-anything (even just save the payload with a timestamp and move on). If
-your server never answers or the POST fails, the device silently drops
-it and tries again next cycle — this never affects card browsing or
-anything else it does.
+The device doesn't expect a reply - this is fire-and-forget, so your
+server just needs to parse any inbound WebSocket message as this shape
+and save it with a timestamp. Since it's the same permanent connection
+the state pushes go out on, a live connection is itself already a
+stronger "is it online" signal than the heartbeat content - the site's
+dashboard shows both (see `device_ws` in `app.py`).
 
-This is what makes "last seen 2 min ago" possible in the UI, instead of
-guessing whether the device is even reachable.
+This is what makes "last seen 2 min ago" (and "connected right now")
+possible in the UI, instead of guessing whether the device is reachable.
 
 ## Security notes
 
 - `X-Device-Key` is a shared secret, not real authentication — enough to
   stop casual/accidental hits on the URL, not a targeted attacker.
-- The device does not validate your server's TLS certificate
-  (`client.setInsecure()` in `RemoteControl.cpp`) — traffic is encrypted
-  in transit but not verified against a specific identity, so it's not
-  resistant to a targeted machine-in-the-middle attack. Fine for a
-  personal project; don't put anything sensitive through this
-  channel.
+- The device does not validate your server's TLS certificate (empty
+  fingerprint passed to `beginSSL()` in `RemoteControl.cpp`) — traffic is
+  encrypted in transit but not verified against a specific identity, so
+  it's not resistant to a targeted machine-in-the-middle attack. Fine for
+  a personal project; don't put anything sensitive through this channel.
 
-## Example minimal server response (for testing)
+## Implementation note: push, not poll
 
-Any backend that returns the JSON above works. For a first smoke test
-before building a real form-based site, even a static JSON file hosted
-somewhere (e.g. a GitHub Gist raw URL) works fine — hand-edit the
-`revision` and other fields to trigger an update, since the device just
-does a plain HTTPS GET.
+This used to be a plain `GET` the device polled on an interval. Now that
+the device is USB-powered, it holds one permanent WebSocket connection
+instead (`RemoteControl.cpp`), and the server pushes a new state message
+the instant something changes - no polling delay, and no fixed interval
+to tune for responsiveness vs. battery life. The site (`site/app.py`)
+keeps a single open connection (`_device_ws`) and calls
+`_push_state_to_device()` right after every dashboard/card-manager action
+that calls `state.apply_update(...)`. Only one device is expected to be
+connected at a time, matching this being a single-recipient personal
+project - the server doesn't try to fan a push out to multiple
+connections.
+
+A minimal test server just needs to accept a WebSocket connection at
+`/ws/device`, check the `X-Device-Key` header on the handshake, and send
+the JSON above as a text frame. `flask-sock` (already used in `site/`)
+makes this a small addition to a normal Flask app rather than a separate
+service.

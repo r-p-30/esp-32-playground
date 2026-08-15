@@ -1,10 +1,14 @@
 services:
   - type: web
     name: desk-mate-site
-    env: python
+    runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    # --worker-class gthread --threads 4: the default sync worker handles
+    # one request at a time per worker, which would let the device's
+    # permanent /ws/device connection block every other request (login,
+    # dashboard) for as long as it stays open. Threads let those coexist.
+    startCommand: gunicorn --worker-class gthread --threads 4 app:app
     envVars:
       - key: FLASK_SECRET_KEY
         sync: false

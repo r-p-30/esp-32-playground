@@ -1,9 +1,12 @@
 import functools
+import json
 import os
+import threading
 import time
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask_sock import Sock
 
 import state
 
@@ -11,6 +14,7 @@ load_dotenv()  # local dev only - Render sets real env vars directly
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-only-not-secure")
+sock = Sock(app)
 
 SITE_PASSWORD = os.environ.get("SITE_PASSWORD")
 DEVICE_API_KEY = os.environ.get("DEVICE_API_KEY")
@@ -27,21 +31,71 @@ def _device_authorized():
     return DEVICE_API_KEY and request.headers.get("X-Device-Key") == DEVICE_API_KEY
 
 
+def _device_state_json():
+    full_state = state.load_state()
+    return json.dumps({k: full_state.get(k) for k in DEVICE_STATE_FIELDS})
+
+
 @app.get("/api/state")
 def get_state():
+    # Manual/debug read of current state (curl-friendly) - the device
+    # itself no longer polls this now that it holds a permanent WebSocket
+    # connection (see /ws/device below); pushes go out on that instead.
     if not _device_authorized():
         return jsonify({"error": "unauthorized"}), 401
-    full_state = state.load_state()
-    return jsonify({k: full_state.get(k) for k in DEVICE_STATE_FIELDS})
+    return _device_state_json(), 200, {"Content-Type": "application/json"}
 
 
-@app.post("/api/heartbeat")
-def post_heartbeat():
+# One device connects at a time (personal project, single recipient) - the
+# dashboard/card-manager routes below push a fresh state JSON down this
+# socket the instant something changes, instead of the device having to
+# poll for it. Guarded by a lock since Flask serves the WS connection and
+# the HTTP action routes from different threads.
+_device_ws = None
+_device_ws_lock = threading.Lock()
+
+
+def _push_state_to_device():
+    global _device_ws
+    with _device_ws_lock:
+        ws = _device_ws
+        if ws is None:
+            return
+        try:
+            ws.send(_device_state_json())
+        except Exception:
+            _device_ws = None
+
+
+@sock.route("/ws/device")
+def device_ws(ws):
+    global _device_ws
     if not _device_authorized():
-        return jsonify({"error": "unauthorized"}), 401
-    payload = request.get_json(silent=True) or {}
-    state.save_heartbeat(payload)
-    return jsonify({"ok": True})
+        ws.close()
+        return
+
+    with _device_ws_lock:
+        _device_ws = ws
+    ws.send(_device_state_json())  # so the device has current state immediately on connect
+
+    try:
+        while True:
+            message = ws.receive()
+            if message is None:
+                break
+            # Only message type the device sends: a small periodic
+            # heartbeat (see docs/remote-api-spec.md) so the dashboard can
+            # show "last seen" - anything else/unparseable is ignored.
+            try:
+                payload = json.loads(message)
+            except ValueError:
+                continue
+            if isinstance(payload, dict):
+                state.save_heartbeat(payload)
+    finally:
+        with _device_ws_lock:
+            if _device_ws is ws:
+                _device_ws = None
 
 
 # ---- Site auth (protects the dashboard/card manager from anyone who finds
@@ -90,6 +144,7 @@ def dashboard():
         state=state.load_state(),
         heartbeat=heartbeat,
         last_seen_sec_ago=last_seen_sec_ago,
+        device_connected=_device_ws is not None,
     )
 
 
@@ -97,6 +152,7 @@ def dashboard():
 @login_required
 def action_buzz():
     state.apply_update({"buzz": True})
+    _push_state_to_device()
     return redirect(url_for("dashboard"))
 
 
@@ -104,6 +160,7 @@ def action_buzz():
 @login_required
 def action_animation():
     state.apply_update({"triggerAnimation": True})
+    _push_state_to_device()
     return redirect(url_for("dashboard"))
 
 
@@ -111,6 +168,7 @@ def action_animation():
 @login_required
 def action_identify():
     state.apply_update({"identifyPing": True})
+    _push_state_to_device()
     return redirect(url_for("dashboard"))
 
 
@@ -120,6 +178,7 @@ def action_carousel():
     enabled = request.form.get("enabled") == "on"
     interval = int(request.form.get("intervalSec") or 8)
     state.apply_update({"carouselEnabled": enabled, "carouselIntervalSec": interval})
+    _push_state_to_device()
     return redirect(url_for("dashboard"))
 
 
@@ -134,6 +193,7 @@ def action_random_notify():
         "randomNotifyMinSec": min_sec,
         "randomNotifyMaxSec": max_sec,
     })
+    _push_state_to_device()
     return redirect(url_for("dashboard"))
 
 
@@ -141,6 +201,7 @@ def action_random_notify():
 @login_required
 def action_night_mode(value):
     state.apply_update({"nightModeEnabled": value == "on"})
+    _push_state_to_device()
     return redirect(url_for("dashboard"))
 
 
@@ -148,6 +209,7 @@ def action_night_mode(value):
 @login_required
 def action_game_mode(value):
     state.apply_update({"gameModeEnabled": value == "on"})
+    _push_state_to_device()
     return redirect(url_for("dashboard"))
 
 
@@ -167,6 +229,7 @@ def card_set_text(index):
     text = request.form.get("text", "")
     state.apply_update({"cardTextIndex": index, "cardText": text})
     state.set_card_text(index, text)
+    _push_state_to_device()
     return redirect(url_for("cards"))
 
 
@@ -176,6 +239,7 @@ def card_activate(index):
     if not (0 <= index < state.NUM_CARDS):
         return redirect(url_for("cards"))
     state.apply_update({"showCard": index})
+    _push_state_to_device()
     return redirect(url_for("cards"))
 
 
@@ -187,8 +251,11 @@ def card_set_duration(index):
     duration_ms = int(request.form.get("durationMs") or 1000)
     state.apply_update({"cardAnimationDurationIndex": index, "cardAnimationDurationMs": duration_ms})
     state.set_card_animation_duration(index, duration_ms)
+    _push_state_to_device()
     return redirect(url_for("cards"))
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=int(os.environ.get("PORT", 5000)))
+    # threaded=True: without it, the dev server is single-threaded and a
+    # held-open /ws/device connection would block every other request.
+    app.run(debug=True, threaded=True, port=int(os.environ.get("PORT", 5000)))

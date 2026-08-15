@@ -126,6 +126,9 @@ button, .link-btn {
 
 .empty-slot { border-style: dashed; opacity: 0.85; }
 
+.conn-on { color: #4caf50; }
+.conn-off { color: var(--muted); }
+
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f5f5f8;

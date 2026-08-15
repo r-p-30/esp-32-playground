@@ -5,22 +5,6 @@
 #include "DisplayUI.h"
 #include "Config.h"
 
-bool connectWiFiBriefly(unsigned long timeoutMs) {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin();  // reconnects with whatever credentials last worked
-
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeoutMs) {
-    delay(100);
-  }
-  return WiFi.status() == WL_CONNECTED;
-}
-
-void disconnectWiFi() {
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-}
-
 // Fires when WiFiManager gives up on known credentials and opens the
 // setup portal - lets the OLED explain what's happening instead of
 // sitting frozen while wm.autoConnect() blocks.
@@ -30,10 +14,10 @@ static void onSetupPortalStart(WiFiManager* wm) {
 
 bool connectWiFiAtBootWithSetupFallback(unsigned long normalTimeoutMs) {
   // Fast path first: reconnect with whatever's already stored in NVS from
-  // a past successful connect (portal-configured or otherwise) - see
-  // connectWiFiBriefly() above. On a genuinely first-ever boot with empty
-  // NVS this just fails immediately and falls through to the setup portal
-  // below, which is the intended path for a never-configured device.
+  // a past successful connect (portal-configured or otherwise). On a
+  // genuinely first-ever boot with empty NVS this just fails immediately
+  // and falls through to the setup portal below, which is the intended
+  // path for a never-configured device.
   WiFi.mode(WIFI_STA);
   WiFi.begin();
 
