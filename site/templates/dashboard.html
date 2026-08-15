@@ -1,56 +1,148 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - Desk Mate{% endblock %}
+{% block title %}Desk Mate{% endblock %}
+{% block mainclass %}wide-page{% endblock %}
 {% block content %}
 
-<section class="card status-line">
-  <p>
-    {% if device_connected %}
-      <strong class="conn-on">&#9679; Connected</strong>
+{% set edit_card = cards[edit_index] %}
+
+<div class="home-grid">
+
+  <section class="card col-actions">
+    <p class="status-dot">
+      {% if device_connected %}
+        <strong class="conn-on">&#9679; Connected</strong>
+      {% else %}
+        <strong class="conn-off">&#9679; Not connected</strong>
+      {% endif %}
+    </p>
+    {% if heartbeat %}
+      <p class="hint">Last seen {{ last_seen_sec_ago }}s ago &middot; card {{ heartbeat.currentCard }}{% if heartbeat.nightMode %} &middot; night{% endif %}{% if heartbeat.gameMode %} &middot; game{% endif %} &middot; up {{ heartbeat.uptimeSec }}s</p>
     {% else %}
-      <strong class="conn-off">&#9679; Not connected</strong>
+      <p class="hint">No heartbeat yet - waiting on the device's first one after connecting.</p>
     {% endif %}
-  </p>
-  {% if heartbeat %}
-    <p><strong>Last seen:</strong> {{ last_seen_sec_ago }}s ago
-      &middot; card {{ heartbeat.currentCard }}
-      {% if heartbeat.nightMode %}&middot; night mode{% endif %}
-      {% if heartbeat.gameMode %}&middot; game mode{% endif %}
-      &middot; up {{ heartbeat.uptimeSec }}s</p>
-  {% else %}
-    <p>No heartbeat received yet - waiting on the device's first one after connecting.</p>
-  {% endif %}
-</section>
 
-<section class="card">
-  <h2>Quick actions</h2>
-  <div class="button-row">
-    <form method="post" action="{{ url_for('action_buzz') }}"><button type="submit">Buzz now</button></form>
-    <form method="post" action="{{ url_for('action_animation') }}"><button type="submit">Play animation</button></form>
-    <form method="post" action="{{ url_for('action_identify') }}"><button type="submit">Identify</button></form>
-  </div>
-</section>
+    <h2>Quick actions</h2>
+    <div class="button-row">
+      <form method="post" action="{{ url_for('action_buzz') }}"><button type="submit">Buzz</button></form>
+      <form method="post" action="{{ url_for('action_animation') }}"><button type="submit">Animate</button></form>
+      <form method="post" action="{{ url_for('action_identify') }}"><button type="submit">Identify</button></form>
+    </div>
 
-<section class="card">
-  <h2>Carousel</h2>
-  <form method="post" action="{{ url_for('action_carousel') }}" class="stack-form">
-    <label><input type="checkbox" name="enabled" {% if state.carouselEnabled %}checked{% endif %}> Enabled (auto-stops after 1 hour)</label>
-    <label for="intervalSec">Interval (seconds)</label>
-    <input type="number" id="intervalSec" name="intervalSec" min="1" value="{{ state.carouselIntervalSec }}">
-    <button type="submit">Save</button>
-  </form>
-</section>
+    <h2>Modes</h2>
+    <form method="post" action="{{ url_for('action_night_mode') }}">
+      <div class="toggle-row">
+        <span>Night mode</span>
+        <label class="toggle">
+          <input type="checkbox" name="enabled" aria-label="Night mode" {% if state.nightModeEnabled %}checked{% endif %} onchange="this.form.submit()">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+      </div>
+    </form>
+    <form method="post" action="{{ url_for('action_game_mode') }}">
+      <div class="toggle-row">
+        <span>Game mode</span>
+        <label class="toggle">
+          <input type="checkbox" name="enabled" aria-label="Game mode" {% if state.gameModeEnabled %}checked{% endif %} onchange="this.form.submit()">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+      </div>
+    </form>
+    <p class="hint">Reflects last sent, not necessarily current - the physical button can override (see status above).</p>
 
-<section class="card">
-  <h2>Night mode / game mode</h2>
-  <p class="hint">Send-only - these don't reflect what's currently active on the device (see status line above for that).</p>
-  <div class="button-row">
-    <form method="post" action="{{ url_for('action_night_mode', value='on') }}"><button type="submit">Night mode on</button></form>
-    <form method="post" action="{{ url_for('action_night_mode', value='off') }}"><button type="submit">Night mode off</button></form>
-  </div>
-  <div class="button-row">
-    <form method="post" action="{{ url_for('action_game_mode', value='on') }}"><button type="submit">Game mode on</button></form>
-    <form method="post" action="{{ url_for('action_game_mode', value='off') }}"><button type="submit">Game mode off</button></form>
-  </div>
-</section>
+    <h2>Carousel</h2>
+    <form method="post" action="{{ url_for('action_carousel') }}" class="stack-form">
+      <div class="toggle-row">
+        <span>Enabled <span class="hint">(auto-stops after 1h)</span></span>
+        <label class="toggle">
+          <input type="checkbox" name="enabled" aria-label="Carousel enabled" {% if state.carouselEnabled %}checked{% endif %}>
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+      </div>
+      <label for="intervalSec">Interval (seconds)</label>
+      <input type="number" id="intervalSec" name="intervalSec" min="1" value="{{ state.carouselIntervalSec }}">
+      <button type="submit">Save</button>
+    </form>
+  </section>
 
+  <section class="card col-editor">
+    <h1>Card editor</h1>
+    <p class="hint">Index 20 is the reserved empty slot by default - filling its text "adds" a card without reflashing.</p>
+
+    <div class="card-picker">
+      {% for c in cards %}
+      <a href="{{ url_for('dashboard', edit=c.index) }}"
+         class="card-picker-btn{% if c.index == edit_index %} active{% endif %}{% if not c.populated %} empty{% endif %}"
+         title="Card {{ c.index }}{% if not c.populated %} (empty){% endif %}">{{ c.index }}</a>
+      {% endfor %}
+    </div>
+
+    <h2>Card {{ edit_index }}{% if not edit_card.populated %} <span class="badge">empty</span>{% endif %}</h2>
+
+    <form method="post" action="{{ url_for('card_save', index=edit_index) }}" class="stack-form" id="builder-form">
+      <label for="text">Text</label>
+      <textarea id="text" name="text" rows="4" oninput="renderPreview()">{{ edit_card.text }}</textarea>
+      <div class="emoji-row">
+        {% for code, glyph in [(':heart:','♥'), (':smile:','☺'), (':smileb:','☻'), (':spade:','♠'), (':club:','♣'), (':diamond:','♦'), (':note:','♪'), (':notes:','♫')] %}
+        <button type="button" class="emoji-btn" onclick="insertShortcode('text', '{{ code }}')" title="{{ code }}">{{ glyph }}</button>
+        {% endfor %}
+      </div>
+      <p class="hint">Alignment/corner decorations only apply if this card uses the default "bounce" layout (true for the reserved slot).</p>
+
+      <label>Text alignment</label>
+      <div class="align-group">
+        {% for v, l in [('left','Left'), ('center','Center'), ('right','Right')] %}
+        <label><input type="radio" name="alignH" value="{{ v }}" {% if edit_card.alignH == v %}checked{% endif %} onchange="renderPreview()"> {{ l }}</label>
+        {% endfor %}
+      </div>
+      <div class="align-group">
+        {% for v, l in [('top','Top'), ('middle','Middle'), ('bottom','Bottom')] %}
+        <label><input type="radio" name="alignV" value="{{ v }}" {% if edit_card.alignV == v %}checked{% endif %} onchange="renderPreview()"> {{ l }}</label>
+        {% endfor %}
+      </div>
+
+      <label>Corner emoji</label>
+      <div class="corner-grid">
+        {% for i, corner_label in [(0,'Top-left'), (1,'Top-right'), (2,'Bottom-left'), (3,'Bottom-right')] %}
+        <div>
+          <label for="corner{{ i }}">{{ corner_label }}</label>
+          <select id="corner{{ i }}" name="corner{{ i }}" onchange="renderPreview()">
+            <option value="" {% if not edit_card.cornerEmoji[i] %}selected{% endif %}>None</option>
+            {% for code, glyph in [(':heart:','♥'), (':smile:','☺'), (':smileb:','☻'), (':spade:','♠'), (':club:','♣'), (':diamond:','♦'), (':note:','♪'), (':notes:','♫')] %}
+            <option value="{{ code }}" {% if edit_card.cornerEmoji[i] == code %}selected{% endif %}>{{ glyph }} {{ code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endfor %}
+      </div>
+
+      <label for="durationMs">Animation duration (ms)</label>
+      <input type="number" id="durationMs" name="durationMs" min="100" step="100" value="{{ edit_card.animationDurationMs }}">
+
+      <div class="toggle-row">
+        <span>Make this the active card</span>
+        <label class="toggle">
+          <input type="checkbox" name="makeActive" aria-label="Make this the active card">
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        </label>
+      </div>
+
+      <div class="button-row">
+        <button type="submit">Save card {{ edit_index }}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card col-preview">
+    <h2>Live preview</h2>
+    <p class="hint">Approximate - actual OLED font/spacing may differ slightly.</p>
+    <div class="preview-canvas-wrap">
+      <canvas id="preview-canvas" width="128" height="64"></canvas>
+    </div>
+  </section>
+
+</div>
+
+<script src="{{ url_for('static', filename='emoji.js') }}"></script>
+<script src="{{ url_for('static', filename='card-preview.js') }}"></script>
+<script>renderPreview();</script>
 {% endblock %}

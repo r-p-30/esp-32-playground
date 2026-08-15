@@ -133,18 +133,30 @@ def logout():
 
 
 # ---- Dashboard ----
+# Single page: actions/status (left), card editor (middle), live preview
+# (right) - see dashboard.html. ?edit=<index> picks which card the editor
+# column shows; every action route below redirects back here with that
+# same param so the selected card doesn't reset after an unrelated action.
 
 @app.get("/dashboard")
 @login_required
 def dashboard():
     heartbeat = state.load_heartbeat()
     last_seen_sec_ago = int(time.time()) - heartbeat["receivedAt"] if heartbeat else None
+
+    all_cards = state.load_cards()
+    edit_index = request.args.get("edit", type=int)
+    if edit_index is None or not (0 <= edit_index < state.NUM_CARDS):
+        edit_index = next((c["index"] for c in all_cards if not c["populated"]), 0)
+
     return render_template(
         "dashboard.html",
         state=state.load_state(),
         heartbeat=heartbeat,
         last_seen_sec_ago=last_seen_sec_ago,
         device_connected=_device_ws is not None,
+        cards=all_cards,
+        edit_index=edit_index,
     )
 
 
@@ -186,54 +198,50 @@ def action_carousel():
     return redirect(url_for("dashboard"))
 
 
-@app.post("/dashboard/night-mode/<value>")
+@app.post("/dashboard/night-mode")
 @login_required
-def action_night_mode(value):
-    state.apply_update({"nightModeEnabled": value == "on"})
+def action_night_mode():
+    enabled = request.form.get("enabled") == "on"
+    state.apply_update({"nightModeEnabled": enabled})
     _push_state_to_device()
-    flash(f"Night mode {'on' if value == 'on' else 'off'} sent.", "success")
+    flash(f"Night mode {'on' if enabled else 'off'} sent.", "success")
     return redirect(url_for("dashboard"))
 
 
-@app.post("/dashboard/game-mode/<value>")
+@app.post("/dashboard/game-mode")
 @login_required
-def action_game_mode(value):
-    state.apply_update({"gameModeEnabled": value == "on"})
+def action_game_mode():
+    enabled = request.form.get("enabled") == "on"
+    state.apply_update({"gameModeEnabled": enabled})
     _push_state_to_device()
-    flash(f"Game mode {'on' if value == 'on' else 'off'} sent.", "success")
+    flash(f"Game mode {'on' if enabled else 'off'} sent.", "success")
     return redirect(url_for("dashboard"))
 
 
 # ---- Card manager ----
-# Single-page builder: GET /cards?edit=<index> selects which card the
-# right-hand panel edits (see cards.html). Saving a card is one combined
-# action (text + alignment + corner emoji + animation duration all in one
-# POST/one revision bump) rather than several separate buttons, so there's
-# exactly one "did this save" moment per edit.
+# Card editing lives on the dashboard page itself (see above) - this route
+# only exists so old /cards?edit=N links/bookmarks keep working.
 
 @app.get("/cards")
 @login_required
 def cards():
-    all_cards = state.load_cards()
-    edit_index = request.args.get("edit", type=int)
-    if edit_index is None or not (0 <= edit_index < state.NUM_CARDS):
-        edit_index = next((c["index"] for c in all_cards if not c["populated"]), 0)
-    return render_template("cards.html", cards=all_cards, edit_index=edit_index)
+    return redirect(url_for("dashboard", edit=request.args.get("edit", type=int)))
 
 
 @app.post("/cards/<int:index>/save")
 @login_required
 def card_save(index):
     if not (0 <= index < state.NUM_CARDS):
-        return redirect(url_for("cards"))
+        return redirect(url_for("dashboard"))
 
     text = request.form.get("text", "")
     align_h = request.form.get("alignH", "center")
     align_v = request.form.get("alignV", "middle")
     corner_emoji = [request.form.get(f"corner{i}", "") for i in range(4)]
     duration_ms = int(request.form.get("durationMs") or 1000)
+    make_active = request.form.get("makeActive") == "on"
 
-    state.apply_update({
+    update = {
         "cardTextIndex": index,
         "cardText": text,
         "cardTextAlignH": align_h,
@@ -241,24 +249,16 @@ def card_save(index):
         "cardCornerEmoji": corner_emoji,
         "cardAnimationDurationIndex": index,
         "cardAnimationDurationMs": duration_ms,
-    })
+    }
+    if make_active:
+        update["showCard"] = index
+    state.apply_update(update)
     state.set_card_text(index, text)
     state.set_card_layout(index, align_h, align_v, corner_emoji)
     state.set_card_animation_duration(index, duration_ms)
     _push_state_to_device()
-    flash(f"Card {index} saved.", "success")
-    return redirect(url_for("cards", edit=index))
-
-
-@app.post("/cards/<int:index>/activate")
-@login_required
-def card_activate(index):
-    if not (0 <= index < state.NUM_CARDS):
-        return redirect(url_for("cards"))
-    state.apply_update({"showCard": index})
-    _push_state_to_device()
-    flash(f"Card {index} is now showing on the device.", "success")
-    return redirect(url_for("cards", edit=index))
+    flash(f"Card {index} saved{' and made active.' if make_active else '.'}", "success")
+    return redirect(url_for("dashboard", edit=index))
 
 
 if __name__ == "__main__":

@@ -11,9 +11,8 @@
 <body class="{% block bodyclass %}{% endblock %}">
   {% if session.logged_in %}
   <nav class="topnav">
-    <a href="{{ url_for('dashboard') }}">Dashboard</a>
-    <a href="{{ url_for('cards') }}">Cards</a>
-    <form method="post" action="{{ url_for('logout') }}" class="inline">
+    <a href="{{ url_for('dashboard') }}" class="navtab active">Desk Mate</a>
+    <form method="post" action="{{ url_for('logout') }}" class="inline navlogout">
       <button type="submit" class="link-btn">Log out</button>
     </form>
   </nav>
