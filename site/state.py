@@ -93,6 +93,30 @@ def load_cards():
     return _read_json(CARDS_PATH, [dict(c) for c in SEED_CARDS])
 
 
+def import_cards_from_device(cards_report):
+    """Overwrites the local card cache with what the device just reported
+    (sent once on every WebSocket connect - see sendCardsReport() in
+    RemoteControl.cpp). The device's RAM only ever changes via a server
+    push, so it's a more reliable source of truth than this cache, which
+    a redeploy/idle restart on free hosting can silently reset to the
+    cards_seed.py defaults - see the module docstring above."""
+    cards = load_cards()
+    by_index = {c["index"]: c for c in cards}
+    for entry in cards_report:
+        index = entry.get("index")
+        if index not in by_index:
+            continue
+        by_index[index].update({
+            "text": entry.get("text", by_index[index]["text"]),
+            "animationDurationMs": entry.get("animationDurationMs", by_index[index]["animationDurationMs"]),
+            "populated": entry.get("populated", by_index[index]["populated"]),
+            "alignH": entry.get("alignH", by_index[index]["alignH"]),
+            "alignV": entry.get("alignV", by_index[index]["alignV"]),
+            "cornerEmoji": entry.get("cornerEmoji", by_index[index]["cornerEmoji"]),
+        })
+    save_cards(cards)
+
+
 def save_cards(cards):
     _write_json(CARDS_PATH, cards)
 

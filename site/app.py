@@ -83,14 +83,21 @@ def device_ws(ws):
             message = ws.receive()
             if message is None:
                 break
-            # Only message type the device sends: a small periodic
-            # heartbeat (see docs/remote-api-spec.md) so the dashboard can
-            # show "last seen" - anything else/unparseable is ignored.
+            # Two message types the device sends: a "cardsReport" once
+            # right after connecting (authoritative resync of card
+            # content - see sendCardsReport() in RemoteControl.cpp) and a
+            # small periodic heartbeat otherwise (see
+            # docs/remote-api-spec.md). Anything else/unparseable is
+            # ignored.
             try:
                 payload = json.loads(message)
             except ValueError:
                 continue
-            if isinstance(payload, dict):
+            if not isinstance(payload, dict):
+                continue
+            if isinstance(payload.get("cardsReport"), list):
+                state.import_cards_from_device(payload["cardsReport"])
+            else:
                 state.save_heartbeat(payload)
     finally:
         with _device_ws_lock:

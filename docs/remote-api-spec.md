@@ -238,6 +238,30 @@ dashboard shows both (see `device_ws` in `app.py`).
 This is what makes "last seen 2 min ago" (and "connected right now")
 possible in the UI, instead of guessing whether the device is reachable.
 
+## Cards report (device → site, sent once per connect)
+
+Right after the WebSocket connects (`WStype_CONNECTED` in
+`RemoteControl.cpp`), the device also sends its full current card list as
+a text frame:
+
+```json
+{"cardsReport": [
+  {"index": 0, "text": "right now", "animationDurationMs": 1000, "populated": true,
+   "alignH": "center", "alignV": "middle", "cornerEmoji": ["", "", "", ""]},
+  ...
+]}
+```
+
+The device's RAM only ever changes via a server push, so it's a more
+reliable source of truth for "what's actually in each card slot" than
+the site's own persisted copy — which a redeploy or idle restart on free
+hosting can silently reset back to `cards_seed.py`'s defaults (see the
+persistence note in `site/state.py`). The server treats this report as
+authoritative and overwrites its local cache with it
+(`state.import_cards_from_device()`), so the card editor self-heals back
+to reality within moments of the device reconnecting, without needing a
+paid persistent disk.
+
 ## Security notes
 
 - `X-Device-Key` is a shared secret, not real authentication — enough to

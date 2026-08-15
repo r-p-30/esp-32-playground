@@ -147,6 +147,51 @@ static void applyStateJson(const uint8_t* payload, size_t length) {
   }
 }
 
+static const char* alignHToString(TextAlignH h) {
+  switch (h) {
+    case ALIGN_H_LEFT: return "left";
+    case ALIGN_H_RIGHT: return "right";
+    default: return "center";
+  }
+}
+
+static const char* alignVToString(TextAlignV v) {
+  switch (v) {
+    case ALIGN_V_TOP: return "top";
+    case ALIGN_V_BOTTOM: return "bottom";
+    default: return "middle";
+  }
+}
+
+// Sent once right after connecting. The device's RAM is a more reliable
+// source of truth for "what's actually in each card slot" than the
+// site's own persisted copy - card text only ever changes here via a
+// server push, so it always reflects the last one that landed, and it
+// survives things that can wipe the site's disk (a redeploy, an idle
+// restart on free hosting). The server treats this as authoritative and
+// overwrites its local cache with it - see /ws/device in app.py.
+static void sendCardsReport() {
+  JsonDocument doc;
+  JsonArray arr = doc["cardsReport"].to<JsonArray>();
+  for (int i = 0; i < NUM_CARDS; i++) {
+    const Card& c = getCardContent(i);
+    JsonObject o = arr.add<JsonObject>();
+    o["index"] = i;
+    o["text"] = c.text;
+    o["animationDurationMs"] = c.animationDurationMs;
+    o["populated"] = c.populated;
+    o["alignH"] = alignHToString(c.alignH);
+    o["alignV"] = alignVToString(c.alignV);
+    JsonArray corners = o["cornerEmoji"].to<JsonArray>();
+    for (int k = 0; k < 4; k++) {
+      corners.add(glyphToEmojiShortcode(c.cornerEmoji[k]));
+    }
+  }
+  String out;
+  serializeJson(doc, out);
+  webSocket.sendTXT(out);
+}
+
 static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_TEXT:
@@ -154,6 +199,7 @@ static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
       break;
     case WStype_CONNECTED:
       Serial.println("Remote control connected.");
+      sendCardsReport();
       break;
     case WStype_DISCONNECTED:
       Serial.println("Remote control disconnected - will auto-retry.");

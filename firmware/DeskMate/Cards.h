@@ -89,6 +89,11 @@ void setCardCornerEmoji(int index, int corner, char glyph);
 // takes a raw glyph, not a shortcode) - RemoteControl.cpp converts.
 char emojiShortcodeToGlyph(const char* code);
 
+// Reverse of the above - glyph byte back to its shortcode string (or ""
+// for 0/unrecognized). Used when reporting current card state back to the
+// site (see sendCardsReport() in RemoteControl.cpp).
+const char* glyphToEmojiShortcode(char glyph);
+
 // Walks from `from` in `direction` (+1 or -1), wrapping around, and
 // returns the index of the next visible card - used so browsing with the
 // knob skips over still-empty reserved slots, and the clock card when no

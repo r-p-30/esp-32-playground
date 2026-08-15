@@ -105,6 +105,14 @@ char emojiShortcodeToGlyph(const char* code) {
   return 0;
 }
 
+const char* glyphToEmojiShortcode(char glyph) {
+  if (glyph == 0) return "";
+  for (int i = 0; i < NUM_EMOJI_SHORTCODES; i++) {
+    if (EMOJI_SHORTCODES[i].glyph == glyph) return EMOJI_SHORTCODES[i].code;
+  }
+  return "";
+}
+
 static void applyEmojiShortcodes(char* text) {
   const auto& table = EMOJI_SHORTCODES;
   const int numCodes = NUM_EMOJI_SHORTCODES;
