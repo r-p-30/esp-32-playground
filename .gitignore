@@ -9,3 +9,16 @@ build/
 # OS cruft
 Thumbs.db
 .DS_Store
+
+# WiFi credentials - fill in locally, never commit (see WifiCredentials.example.h)
+**/WifiCredentials.h
+
+# Remote-control API URL/key - fill in locally, never commit (see RemoteApi.example.h)
+**/RemoteApi.h
+
+# Companion site secrets and persisted state - fill in locally, never commit
+# (see site/.env.example)
+site/.env
+site/instance/
+site/__pycache__/
+site/venv/

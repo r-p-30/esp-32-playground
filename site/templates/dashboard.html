@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Desk Mate{% endblock %}
+{% block content %}
+
+<section class="card status-line">
+  {% if heartbeat %}
+    <p><strong>Last seen:</strong> {{ last_seen_sec_ago }}s ago
+      &middot; card {{ heartbeat.currentCard }}
+      {% if heartbeat.nightMode %}&middot; night mode{% endif %}
+      {% if heartbeat.gameMode %}&middot; game mode{% endif %}
+      &middot; up {{ heartbeat.uptimeSec }}s</p>
+  {% else %}
+    <p>No heartbeat received yet - device hasn't polled, or REMOTE_HEARTBEAT_URL isn't configured.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Quick actions</h2>
+  <div class="button-row">
+    <form method="post" action="{{ url_for('action_buzz') }}"><button type="submit">Buzz now</button></form>
+    <form method="post" action="{{ url_for('action_animation') }}"><button type="submit">Play animation</button></form>
+    <form method="post" action="{{ url_for('action_identify') }}"><button type="submit">Identify</button></form>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Carousel</h2>
+  <form method="post" action="{{ url_for('action_carousel') }}" class="stack-form">
+    <label><input type="checkbox" name="enabled" {% if state.carouselEnabled %}checked{% endif %}> Enabled (auto-stops after 1 hour)</label>
+    <label for="intervalSec">Interval (seconds)</label>
+    <input type="number" id="intervalSec" name="intervalSec" min="1" value="{{ state.carouselIntervalSec }}">
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Random notify</h2>
+  <form method="post" action="{{ url_for('action_random_notify') }}" class="stack-form">
+    <label><input type="checkbox" name="enabled" {% if state.randomNotifyEnabled %}checked{% endif %}> Enabled</label>
+    <label for="minSec">Min seconds</label>
+    <input type="number" id="minSec" name="minSec" min="1" value="{{ state.randomNotifyMinSec }}">
+    <label for="maxSec">Max seconds</label>
+    <input type="number" id="maxSec" name="maxSec" min="1" value="{{ state.randomNotifyMaxSec }}">
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Night mode / game mode</h2>
+  <p class="hint">Send-only - these don't reflect what's currently active on the device (see status line above for that).</p>
+  <div class="button-row">
+    <form method="post" action="{{ url_for('action_night_mode', value='on') }}"><button type="submit">Night mode on</button></form>
+    <form method="post" action="{{ url_for('action_night_mode', value='off') }}"><button type="submit">Night mode off</button></form>
+  </div>
+  <div class="button-row">
+    <form method="post" action="{{ url_for('action_game_mode', value='on') }}"><button type="submit">Game mode on</button></form>
+    <form method="post" action="{{ url_for('action_game_mode', value='off') }}"><button type="submit">Game mode off</button></form>
+  </div>
+</section>
+
+{% endblock %}

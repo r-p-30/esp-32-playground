@@ -5,7 +5,8 @@ enum EncoderEvent {
   ENC_NEXT,
   ENC_PREV,
   ENC_SHORT_PRESS,
-  ENC_LONG_PRESS
+  ENC_LONG_PRESS,
+  ENC_VERY_LONG_PRESS
 };
 
 void initEncoder();

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Cards - Desk Mate{% endblock %}
+{% block content %}
+
+<h1>Cards</h1>
+<p class="hint">Index 20 is the reserved empty slot - filling its text "adds" a card without reflashing. Every other index is a real content card.</p>
+
+{% for c in cards %}
+<section class="card {% if not c.populated %}empty-slot{% endif %}">
+  <h2>Card {{ c.index }}{% if not c.populated %} <span class="badge">empty</span>{% endif %}</h2>
+
+  <form method="post" action="{{ url_for('card_set_text', index=c.index) }}" class="stack-form">
+    <textarea id="text-{{ c.index }}" name="text" rows="4">{{ c.text }}</textarea>
+    <div class="emoji-row">
+      {% for code, glyph in [(':heart:','♥'), (':smile:','☺'), (':smileb:','☻'), (':spade:','♠'), (':club:','♣'), (':diamond:','♦'), (':note:','♪'), (':notes:','♫')] %}
+      <button type="button" class="emoji-btn" onclick="insertShortcode('text-{{ c.index }}', '{{ code }}')" title="{{ code }}">{{ glyph }}</button>
+      {% endfor %}
+    </div>
+    <button type="submit">Save text</button>
+  </form>
+
+  <div class="button-row">
+    <form method="post" action="{{ url_for('card_activate', index=c.index) }}">
+      <button type="submit">Make active</button>
+    </form>
+    <form method="post" action="{{ url_for('card_set_duration', index=c.index) }}" class="inline">
+      <input type="number" name="durationMs" min="100" step="100" value="{{ c.animationDurationMs }}" style="width:6em">
+      <button type="submit">Set animation ms</button>
+    </form>
+  </div>
+</section>
+{% endfor %}
+
+<script src="{{ url_for('static', filename='emoji.js') }}"></script>
+{% endblock %}

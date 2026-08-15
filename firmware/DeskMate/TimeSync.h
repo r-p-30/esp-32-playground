@@ -7,8 +7,3 @@ void syncTime();
 
 // True if syncTime() managed to get a real timestamp this boot.
 bool isTimeSynced();
-
-// Phase 2 stub: intentionally empty for now. This is the seam where a
-// scheduled check-in with the hosted config site will be added later,
-// without needing to restructure the rest of the sketch.
-void checkForSync();
