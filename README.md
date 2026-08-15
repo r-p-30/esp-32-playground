@@ -19,7 +19,6 @@ feedback, and — optionally — full remote control from a hosted site.
 - 1.3" I2C OLED, 128×64 (SSD1306)
 - KY-040 rotary encoder (with push-button)
 - Passive piezo buzzer
-- 3×AA battery pack (for portability, once WiFi power draw is known)
 
 Wiring and pin assignments are in `docs/desk-mate-project-plan.md` and mirrored
 in `firmware/DeskMate/Config.h`.
@@ -27,14 +26,7 @@ in `firmware/DeskMate/Config.h`.
 ## What it does
 
 **21 content cards** (plus 1 reserved empty slot), each with its own
-short-press animation — Pac-Man in an actual maze, a two-flower bouquet
-with a butterfly, terminal-styled dev jokes, a heartbeat pulse, sunrise
-with birds, a starfield with a shooting star, a box that shakes open
-with confetti, a live-ticking friendship-stats bar, a connect-the-dots
-constellation, a simplified India map with a location pin, a Chrome-dino
-homage complete with cacti and a ground line, and more. Card 0 ("good
-morning") is what shows at boot; the clock card only appears once a real
-time sync has succeeded that boot.
+short-press animation.
 
 **Three physical button tiers** on the encoder's push-button:
 
@@ -61,7 +53,7 @@ connection) and can be remotely told to:
 - Insert a small set of emoji-like symbols via shortcodes (`:heart:`, `:smile:`, `:note:`, etc. — the OLED's font can't render real Unicode emoji)
 - Buzz the device, or trigger the active card's animation, without anyone touching the button
 - Send an "identify" ping (double-beep + screen flash) to confirm connectivity while debugging the site
-- Run a carousel (auto-advancing cards) with a configurable interval — hard-capped at 1 hour of continuous runtime so a forgotten toggle can't drain the battery
+- Run a carousel (auto-advancing cards) with a configurable interval — hard-capped at 1 hour of continuous runtime so a forgotten toggle can't leave it running indefinitely
 - Play a soft ambient ping at a random interval, within a configurable range
 - Toggle night mode or game mode remotely (mirrors the physical long/very-long press)
 
@@ -107,14 +99,12 @@ arduino-cli compile --fqbn esp32:esp32:esp32 firmware/DeskMate
 
 Firmware compiles clean against `esp32:esp32@3.3.11` (~83% flash, ~16%
 RAM). Bench-tested on real hardware for the core loop (OLED, encoder,
-buzzer, WiFi/NTP). Remote control, night mode, and game-mode placeholder
-are built and compiling. The companion site (dashboard, card manager,
-heartbeat) is built but not yet deployed/tested end-to-end against real
-hardware, and battery runtime hasn't been measured yet.
+buzzer, WiFi/NTP, WiFiManager captive-portal setup). Remote control,
+night mode, and game-mode placeholder are built and compiling. The
+companion site (dashboard, card manager, heartbeat) is built but not yet
+deployed/tested end-to-end against real hardware.
 
 ## Roadmap
 
 - Real game mode (currently just a placeholder screen behind the long-press toggle)
 - Deploy the companion site and do an end-to-end test against real hardware
-- Battery runtime testing once the 3×AA pack is wired to VIN
-- WiFiManager swap so WiFi credentials can be entered via a captive portal, instead of hardcoded ones
