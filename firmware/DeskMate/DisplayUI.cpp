@@ -119,14 +119,19 @@ static void printAligned(const char* text, TextAlignH alignH, TextAlignV alignV,
 
 // Draws the 4 corner-decoration glyphs (Card.cornerEmoji), skipping any
 // that are 0 (unset). Inset just enough to clear the card's frame border.
+// Drawn at 2x text size (Adafruit_GFX only offers integer multiples) -
+// at the default size these single CP437 glyphs are ~5x7px and read as
+// little more than a dot on a 128x64 screen.
 static void drawCornerEmoji(const char cornerEmoji[4]) {
-  static const int cx[4] = { 3, OLED_WIDTH - 9, 3, OLED_WIDTH - 9 };
-  static const int cy[4] = { 3, 3, OLED_HEIGHT - 11, OLED_HEIGHT - 11 };
+  static const int cx[4] = { 3, OLED_WIDTH - 15, 3, OLED_WIDTH - 15 };
+  static const int cy[4] = { 3, 3, OLED_HEIGHT - 17, OLED_HEIGHT - 17 };
+  display.setTextSize(2);
   for (int i = 0; i < 4; i++) {
     if (cornerEmoji[i] == 0) continue;
     display.setCursor(cx[i], cy[i]);
     display.print(cornerEmoji[i]);
   }
+  display.setTextSize(1);
 }
 
 // Same as printCentered but left-aligned at a fixed x - used for cards

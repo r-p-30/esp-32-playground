@@ -117,11 +117,12 @@ button, .link-btn {
   gap: 0.5rem;
 }
 .button-row form { margin: 0; }
+.button-row button { margin-top: 0; }
 
 .emoji-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
+  gap: 0.35rem;
   margin-top: 0.5rem;
 }
 
@@ -130,9 +131,9 @@ button, .link-btn {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
-  width: 2.4rem;
-  height: 2.4rem;
-  font-size: 1.1rem;
+  width: 3.6rem;
+  height: 3.6rem;
+  font-size: 2.6rem;
   margin: 0;
 }
 
@@ -256,9 +257,11 @@ select {
 }
 
 #preview-canvas {
+  /* Backing store is 512x256 (4x the logical 128x64 OLED) - displayed
+     smaller than native so the browser downsamples for crisp, readable
+     text instead of the previous tiny-bitmap-stretched-up blur. */
   background: #000;
   border-radius: 6px;
-  image-rendering: pixelated;
   width: 384px;
   height: 192px;
   max-width: 100%;

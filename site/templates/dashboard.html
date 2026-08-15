@@ -47,7 +47,6 @@
         </label>
       </div>
     </form>
-    <p class="hint">Reflects last sent, not necessarily current - the physical button can override (see status above).</p>
 
     <h2>Carousel</h2>
     <form method="post" action="{{ url_for('action_carousel') }}" class="stack-form">
@@ -134,9 +133,10 @@
 
   <section class="card col-preview">
     <h2>Live preview</h2>
-    <p class="hint">Approximate - actual OLED font/spacing may differ slightly.</p>
+    <p class="hint">Approximate - actual OLED font/spacing may differ slightly. Animation preview only simulates the default "bounce" layout.</p>
     <div class="preview-canvas-wrap">
-      <canvas id="preview-canvas" width="128" height="64"></canvas>
+      <canvas id="preview-canvas" width="512" height="256"></canvas>
+      <button type="button" onclick="previewAnimation()">&#9654; Preview animation</button>
     </div>
   </section>
 
