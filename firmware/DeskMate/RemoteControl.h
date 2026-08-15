@@ -41,17 +41,12 @@ bool consumeIdentifyPing();
 bool isCarouselEnabled();
 unsigned long getCarouselIntervalMs();
 
-// Returns true exactly once each time a randomly-scheduled "ambient"
-// notification comes due (only when randomNotifyEnabled is set remotely).
-// Call every loop() iteration - internally self-scheduling.
-bool consumeRandomNotify();
-
-// Unlike carousel/randomNotify (which have no local competing control),
-// night mode and game mode can also be toggled by the physical button -
-// so these are edge-triggered on the *site's* value actually changing,
-// not blindly reasserted every push. That way a local toggle sticks
-// until the site genuinely changes its stored value again, instead of
-// being fought by a default that never moved. Returns 1 (on), 0 (off),
-// or -1 (no change since last call).
+// Unlike carousel (which has no local competing control), night mode and
+// game mode can also be toggled by the physical button - so these are
+// edge-triggered on the *site's* value actually changing, not blindly
+// reasserted every push. That way a local toggle sticks until the site
+// genuinely changes its stored value again, instead of being fought by a
+// default that never moved. Returns 1 (on), 0 (off), or -1 (no change
+// since last call).
 int consumeRemoteNightModeChange();
 int consumeRemoteGameModeChange();

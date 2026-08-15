@@ -32,10 +32,6 @@ void playIncomingMessage() {
   noTone(PIN_BUZZER);
 }
 
-void playRandomPing() {
-  tone(PIN_BUZZER, 1800, 60);
-}
-
 void playIdentifyPing() {
   tone(PIN_BUZZER, 1200, 60);
   delay(90);

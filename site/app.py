@@ -5,7 +5,7 @@ import threading
 import time
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_sock import Sock
 
 import state
@@ -153,6 +153,7 @@ def dashboard():
 def action_buzz():
     state.apply_update({"buzz": True})
     _push_state_to_device()
+    flash("Buzzed the device.", "success")
     return redirect(url_for("dashboard"))
 
 
@@ -161,6 +162,7 @@ def action_buzz():
 def action_animation():
     state.apply_update({"triggerAnimation": True})
     _push_state_to_device()
+    flash("Played the current card's animation.", "success")
     return redirect(url_for("dashboard"))
 
 
@@ -169,6 +171,7 @@ def action_animation():
 def action_identify():
     state.apply_update({"identifyPing": True})
     _push_state_to_device()
+    flash("Sent identify ping.", "success")
     return redirect(url_for("dashboard"))
 
 
@@ -179,21 +182,7 @@ def action_carousel():
     interval = int(request.form.get("intervalSec") or 8)
     state.apply_update({"carouselEnabled": enabled, "carouselIntervalSec": interval})
     _push_state_to_device()
-    return redirect(url_for("dashboard"))
-
-
-@app.post("/dashboard/random-notify")
-@login_required
-def action_random_notify():
-    enabled = request.form.get("enabled") == "on"
-    min_sec = int(request.form.get("minSec") or 60)
-    max_sec = int(request.form.get("maxSec") or 300)
-    state.apply_update({
-        "randomNotifyEnabled": enabled,
-        "randomNotifyMinSec": min_sec,
-        "randomNotifyMaxSec": max_sec,
-    })
-    _push_state_to_device()
+    flash("Carousel settings saved.", "success")
     return redirect(url_for("dashboard"))
 
 
@@ -202,6 +191,7 @@ def action_random_notify():
 def action_night_mode(value):
     state.apply_update({"nightModeEnabled": value == "on"})
     _push_state_to_device()
+    flash(f"Night mode {'on' if value == 'on' else 'off'} sent.", "success")
     return redirect(url_for("dashboard"))
 
 
@@ -210,27 +200,54 @@ def action_night_mode(value):
 def action_game_mode(value):
     state.apply_update({"gameModeEnabled": value == "on"})
     _push_state_to_device()
+    flash(f"Game mode {'on' if value == 'on' else 'off'} sent.", "success")
     return redirect(url_for("dashboard"))
 
 
 # ---- Card manager ----
+# Single-page builder: GET /cards?edit=<index> selects which card the
+# right-hand panel edits (see cards.html). Saving a card is one combined
+# action (text + alignment + corner emoji + animation duration all in one
+# POST/one revision bump) rather than several separate buttons, so there's
+# exactly one "did this save" moment per edit.
 
 @app.get("/cards")
 @login_required
 def cards():
-    return render_template("cards.html", cards=state.load_cards())
+    all_cards = state.load_cards()
+    edit_index = request.args.get("edit", type=int)
+    if edit_index is None or not (0 <= edit_index < state.NUM_CARDS):
+        edit_index = next((c["index"] for c in all_cards if not c["populated"]), 0)
+    return render_template("cards.html", cards=all_cards, edit_index=edit_index)
 
 
-@app.post("/cards/<int:index>/text")
+@app.post("/cards/<int:index>/save")
 @login_required
-def card_set_text(index):
+def card_save(index):
     if not (0 <= index < state.NUM_CARDS):
         return redirect(url_for("cards"))
+
     text = request.form.get("text", "")
-    state.apply_update({"cardTextIndex": index, "cardText": text})
+    align_h = request.form.get("alignH", "center")
+    align_v = request.form.get("alignV", "middle")
+    corner_emoji = [request.form.get(f"corner{i}", "") for i in range(4)]
+    duration_ms = int(request.form.get("durationMs") or 1000)
+
+    state.apply_update({
+        "cardTextIndex": index,
+        "cardText": text,
+        "cardTextAlignH": align_h,
+        "cardTextAlignV": align_v,
+        "cardCornerEmoji": corner_emoji,
+        "cardAnimationDurationIndex": index,
+        "cardAnimationDurationMs": duration_ms,
+    })
     state.set_card_text(index, text)
+    state.set_card_layout(index, align_h, align_v, corner_emoji)
+    state.set_card_animation_duration(index, duration_ms)
     _push_state_to_device()
-    return redirect(url_for("cards"))
+    flash(f"Card {index} saved.", "success")
+    return redirect(url_for("cards", edit=index))
 
 
 @app.post("/cards/<int:index>/activate")
@@ -240,19 +257,8 @@ def card_activate(index):
         return redirect(url_for("cards"))
     state.apply_update({"showCard": index})
     _push_state_to_device()
-    return redirect(url_for("cards"))
-
-
-@app.post("/cards/<int:index>/duration")
-@login_required
-def card_set_duration(index):
-    if not (0 <= index < state.NUM_CARDS):
-        return redirect(url_for("cards"))
-    duration_ms = int(request.form.get("durationMs") or 1000)
-    state.apply_update({"cardAnimationDurationIndex": index, "cardAnimationDurationMs": duration_ms})
-    state.set_card_animation_duration(index, duration_ms)
-    _push_state_to_device()
-    return redirect(url_for("cards"))
+    flash(f"Card {index} is now showing on the device.", "success")
+    return redirect(url_for("cards", edit=index))
 
 
 if __name__ == "__main__":

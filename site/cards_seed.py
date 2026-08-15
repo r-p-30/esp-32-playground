@@ -30,3 +30,12 @@ SEED_CARDS = [
     {"index": 20, "text": "-- empty slot --\n\nnothing here\nyet", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": False},
     {"index": 21, "text": "good night", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
 ]
+
+# Layout defaults - only visible on the device for cards using the generic
+# ANIM_BOUNCE layout (the reserved/custom slot, index 20 by default) - see
+# Cards.h. "center"/"middle" here matches every built-in card's fixed
+# hand-drawn layout, so this is a safe no-op default for the other 21.
+for _card in SEED_CARDS:
+    _card.setdefault("alignH", "center")
+    _card.setdefault("alignV", "middle")
+    _card.setdefault("cornerEmoji", ["", "", "", ""])  # [topLeft, topRight, bottomLeft, bottomRight]

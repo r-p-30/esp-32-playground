@@ -29,6 +29,13 @@ enum CardAnimation : uint8_t {
   ANIM_EQUALIZER,  // no press animation - bars move continuously on their own
 };
 
+// Zero-valued members (CENTER/MIDDLE/no corner emoji) intentionally match
+// today's fixed-layout look, so every existing card initializer in
+// Cards.cpp keeps compiling unchanged - C++ zero-fills any trailing
+// aggregate-initializer members that aren't explicitly listed.
+enum TextAlignH : uint8_t { ALIGN_H_CENTER = 0, ALIGN_H_LEFT, ALIGN_H_RIGHT };
+enum TextAlignV : uint8_t { ALIGN_V_MIDDLE = 0, ALIGN_V_TOP, ALIGN_V_BOTTOM };
+
 struct Card {
   char text[CARD_TEXT_LEN];  // mutable - remote updates write directly here
   const uint8_t* bitmap;     // nullptr if this card has no icon bitmap
@@ -37,6 +44,14 @@ struct Card {
   CardAnimation animation;   // which short-press animation this card uses
   bool populated;            // false for reserved slots until filled remotely
   uint16_t animationDurationMs;  // how long this card's short-press animation runs
+
+  // Only respected by the generic ANIM_BOUNCE layout (drawBounce() in
+  // DisplayUI.cpp) - every other animation has its own bespoke hand-tuned
+  // layout that doesn't use these. That's the reserved/custom-card slot,
+  // i.e. the only card meant to be layout-configurable from the site.
+  TextAlignH alignH;
+  TextAlignV alignV;
+  char cornerEmoji[4];  // CP437 byte per corner: TL, TR, BL, BR. 0 = none.
 };
 
 extern Card cards[];
@@ -58,6 +73,21 @@ void setCardText(int index, const char* text);
 // 0 or absurdly large values are left as-is by the caller; this just
 // stores whatever it's given.
 void setCardAnimationDuration(int index, uint16_t durationMs);
+
+// Sets text alignment for the card at the given index - only visible on
+// cards using ANIM_BOUNCE (see Card's comment above).
+void setCardAlignment(int index, TextAlignH alignH, TextAlignV alignV);
+
+// Sets (or clears, with glyph 0) the CP437 corner-decoration emoji at one
+// of the 4 corners (0=TL, 1=TR, 2=BL, 3=BR) - out-of-range corner indices
+// are ignored.
+void setCardCornerEmoji(int index, int corner, char glyph);
+
+// Looks up one of the shortcodes in docs/remote-api-spec.md's emoji table
+// (e.g. ":heart:") and returns its CP437 glyph byte, or 0 if the code is
+// empty/unrecognized. Used for corner-emoji decorations (setCardCornerEmoji
+// takes a raw glyph, not a shortcode) - RemoteControl.cpp converts.
+char emojiShortcodeToGlyph(const char* code);
 
 // Walks from `from` in `direction` (+1 or -1), wrapping around, and
 // returns the index of the next visible card - used so browsing with the

@@ -57,6 +57,78 @@ static void printCentered(const char* text, int yTop, int yBottom, int lineHeigh
   }
 }
 
+// Generalized version of printCentered with per-axis alignment, used only
+// by drawBounce() (the ANIM_BOUNCE / custom-card layout) - every other
+// animation below calls printCentered/printLeftAligned directly with its
+// own hand-tuned bounds, since a user-editable layout doesn't make sense
+// on a fixed hand-drawn animation.
+static void printAligned(const char* text, TextAlignH alignH, TextAlignV alignV,
+                          int xLeft, int xRight, int yTop, int yBottom, int lineHeight) {
+  int numLines = 1;
+  for (const char* p = text; *p; p++) {
+    if (*p == '\n') numLines++;
+  }
+  int blockHeight = numLines * lineHeight;
+
+  int y;
+  if (alignV == ALIGN_V_TOP) {
+    y = yTop;
+  } else if (alignV == ALIGN_V_BOTTOM) {
+    y = yBottom - blockHeight;
+    if (y < yTop) y = yTop;
+  } else {
+    y = yTop + ((yBottom - yTop) - blockHeight) / 2;
+    if (y < yTop) y = yTop;
+  }
+
+  const char* lineStart = text;
+  while (*lineStart) {
+    const char* nl = strchr(lineStart, '\n');
+    int len = nl ? (int)(nl - lineStart) : (int)strlen(lineStart);
+
+    char lineBuf[48];
+    int copyLen = len < (int)sizeof(lineBuf) - 1 ? len : (int)sizeof(lineBuf) - 1;
+    memcpy(lineBuf, lineStart, copyLen);
+    lineBuf[copyLen] = '\0';
+
+    int x;
+    if (alignH == ALIGN_H_LEFT) {
+      x = xLeft;
+    } else if (alignH == ALIGN_H_RIGHT) {
+      int16_t x1, y1;
+      uint16_t w, h;
+      display.getTextBounds(lineBuf, 0, y, &x1, &y1, &w, &h);
+      x = xRight - (int)w;
+      if (x < xLeft) x = xLeft;
+    } else {
+      int16_t x1, y1;
+      uint16_t w, h;
+      display.getTextBounds(lineBuf, 0, y, &x1, &y1, &w, &h);
+      x = xLeft + ((xRight - xLeft) - (int)w) / 2;
+      if (x < xLeft) x = xLeft;
+    }
+
+    display.setCursor(x, y);
+    display.print(lineBuf);
+
+    y += lineHeight;
+    if (!nl) break;
+    lineStart = nl + 1;
+  }
+}
+
+// Draws the 4 corner-decoration glyphs (Card.cornerEmoji), skipping any
+// that are 0 (unset). Inset just enough to clear the card's frame border.
+static void drawCornerEmoji(const char cornerEmoji[4]) {
+  static const int cx[4] = { 3, OLED_WIDTH - 9, 3, OLED_WIDTH - 9 };
+  static const int cy[4] = { 3, 3, OLED_HEIGHT - 11, OLED_HEIGHT - 11 };
+  for (int i = 0; i < 4; i++) {
+    if (cornerEmoji[i] == 0) continue;
+    display.setCursor(cx[i], cy[i]);
+    display.print(cornerEmoji[i]);
+  }
+}
+
 // Same as printCentered but left-aligned at a fixed x - used for cards
 // with a side-by-side layout instead of caption-on-top.
 static void printLeftAligned(const char* text, int x, int yTop, int yBottom, int lineHeight) {
@@ -793,7 +865,7 @@ static void drawEqualizer(const Card& card, bool animating, float progress) {
 }
 
 static void drawBounce(const Card& card, bool animating, float progress) {
-  printCentered(card.text, 0, OLED_HEIGHT, 9);
+  printAligned(card.text, card.alignH, card.alignV, 4, OLED_WIDTH - 4, 0, OLED_HEIGHT, 9);
   if (animating) {
     const int topY = 20, bottomY = OLED_HEIGHT - 12;
     float wave = 1.0f - fabsf(2.0f * progress - 1.0f);
@@ -844,6 +916,8 @@ static void drawCardFrame(int index, bool animating, float progress) {
     int y = 2;
     display.drawBitmap(x, y, card.bitmap, card.bmpW, card.bmpH, SSD1306_WHITE);
   }
+
+  drawCornerEmoji(card.cornerEmoji);
 
   display.display();
 }

@@ -9,4 +9,7 @@ function insertShortcode(textareaId, code) {
   const cursor = start + code.length;
   el.focus();
   el.setSelectionRange(cursor, cursor);
+  // Programmatic value changes don't fire 'input' on their own - dispatch
+  // it so listeners like the card builder's live preview still update.
+  el.dispatchEvent(new Event('input', { bubbles: true }));
 }

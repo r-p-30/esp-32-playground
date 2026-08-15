@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <title>{% block title %}Desk Mate{% endblock %}</title>
 </head>
-<body>
+<body class="{% block bodyclass %}{% endblock %}">
   {% if session.logged_in %}
   <nav class="topnav">
     <a href="{{ url_for('dashboard') }}">Dashboard</a>
@@ -18,7 +18,24 @@
     </form>
   </nav>
   {% endif %}
-  <main>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-stack" id="flash-stack">
+      {% for category, message in messages %}
+      <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    <script>
+      setTimeout(() => {
+        const el = document.getElementById('flash-stack');
+        if (el) el.classList.add('flash-fade');
+      }, 2500);
+    </script>
+    {% endif %}
+  {% endwith %}
+
+  <main class="{% block mainclass %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
 </body>

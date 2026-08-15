@@ -17,8 +17,9 @@ The device holds a permanent WebSocket connection to this site (it's USB-powered
 | Buzz the device | `buzz` | Distinct 3-beep pattern, separate from the routine navigation beep |
 | Play the current card's animation | `triggerAnimation` | Same animation as a short press, no button needed |
 | Carousel / auto-advance | `carouselEnabled` + `carouselIntervalSec` | Continuous setting, not a one-time action. **Device enforces a hard 1-hour auto-stop** regardless of what's sent — see below |
-| Random ambient notification | `randomNotifyEnabled` + `randomNotifyMinSec`/`randomNotifyMaxSec` | Soft ping at a random interval within the range |
 | Emoji in card text | `:heart:` `:smile:` `:smileb:` `:spade:` `:club:` `:diamond:` `:note:` `:notes:` shortcodes | Only these 8 render correctly — see constraint below |
+| Text alignment on the custom card | `cardTextAlignH` + `cardTextAlignV` | Only visible on cards using the generic bounce layout (the reserved slot by default) - see remote-api-spec.md |
+| Corner-emoji decorations on the custom card | `cardCornerEmoji` (array of 4) | Same bounce-layout-only caveat as alignment |
 | "Is this thing on?" check | `identifyPing` | Beeps twice + flashes the screen, touches nothing else — useful while building the site |
 | Night mode (dim screen + big clock) | `nightModeEnabled` | Also toggleable on-device via a 5-second press-hold. **Edge-triggered, not sticky** — see the gotcha in §3 |
 | Game mode (placeholder for now) | `gameModeEnabled` | Also toggleable on-device via a 2-second press-hold. Real gameplay isn't built — this just switches to a "coming soon" screen |
@@ -43,14 +44,16 @@ The site needs to persist one "current state" blob — this is what gets pushed 
   showCard: number | null,
   cardTextIndex: number | null,
   cardText: string | null,
+  cardTextAlignH: string | null,   // "left" | "center" | "right"
+  cardTextAlignV: string | null,   // "top" | "middle" | "bottom"
+  cardCornerEmoji: string[] | null,  // [topLeft, topRight, bottomLeft, bottomRight] shortcodes
+  cardAnimationDurationIndex: number | null,
+  cardAnimationDurationMs: number | null,
   buzz: boolean,
   triggerAnimation: boolean,
   identifyPing: boolean,
   carouselEnabled: boolean,
   carouselIntervalSec: number,
-  randomNotifyEnabled: boolean,
-  randomNotifyMinSec: number,
-  randomNotifyMaxSec: number,
   nightModeEnabled: boolean,
   gameModeEnabled: boolean,
 }
@@ -64,7 +67,7 @@ Plus, separately (for the UI's own use, not sent to the device): the site should
 
 `showCard`, `cardTextIndex`/`cardText`, `buzz`, and `triggerAnimation` only fire on the device when `revision` is new — but if your backend leaves `buzz: true` sitting in the saved state after the "buzz now" button was clicked, the **next unrelated edit** (e.g. changing a card's text) will bump `revision` again and cause an unintended second buzz, since the device just sees "new revision, buzz is true."
 
-**Design rule for your backend:** every save should explicitly set the one-shot fields to their neutral value (`null`/`false`) *unless* that specific action is what the user just triggered. Don't accumulate old actions across saves. The continuous settings (`carouselEnabled`, `randomNotify*`) are the exception — those should persist normally.
+**Design rule for your backend:** every save should explicitly set the one-shot fields to their neutral value (`null`/`false`) *unless* that specific action is what the user just triggered. Don't accumulate old actions across saves. The continuous settings (`carouselEnabled`, `carouselIntervalSec`, `nightModeEnabled`, `gameModeEnabled`) are the exception — those should persist normally.
 
 ### Second gotcha: night/game mode toggles reflect "last sent," not "current state"
 
@@ -79,18 +82,17 @@ Practically: don't build a toggle switch that claims to show "is night mode on r
 **Dashboard**
 - Quick actions: "Buzz now", "Play animation now", "Identify" (the last one is for you while building/debugging, not really a day-to-day feature) — each just fires a save with only that one field set
 - Carousel toggle + interval input
-- Random notify toggle + min/max inputs
 - Night mode / game mode: send-only buttons ("turn on" / "turn off"), not a toggle that claims to reflect current state — see the gotcha in §3
-- Status line fed by the heartbeat (see §6): "last seen 2 min ago", current card, current mode — this is the one place in the UI that shows *actual* device state instead of *last sent* state
+- Status line fed by the connection + heartbeat (see §6): "● Connected"/"● Not connected", "last seen 2 min ago", current card, current mode — this is the one place in the UI that shows *actual* device state instead of *last sent* state
+- Every action shows a flash-message confirmation on save - "no way to know if it saved" was real feedback from an earlier version of this UI
 
-**Card manager**
-- List of 21 content cards (0-20), each showing current text + an edit box + the 8-shortcode emoji row
-- 1 "add new card" slot (21) shown visually distinct from the real cards (e.g. dashed border, "empty" label) until filled
-- A "make this the active card" button per card (sets `showCard`)
-- Optional: a mock OLED preview (128×64, monochrome, centered text) next to the edit box so you can see roughly how it'll look before saving — this was in the original Phase 2 vision and is probably the single highest-value UI feature, since getting line breaks/length wrong is the easiest way to end up with clipped text on the real device
-
-**Settings**
-- Carousel and random-notify configuration (could just live on the dashboard instead of a separate page, given how few fields there are)
+**Card manager** (built as a single-page builder, not a long stacked list - see below)
+- A compact numbered picker for all 22 cards (`?edit=<index>` in the URL) - clicking one loads it into the builder without leaving the page
+- Text box + the 8-shortcode emoji row for inserting into the text
+- Text alignment (H/V) and 4 corner-emoji pickers - only visible on the device for cards using the generic bounce layout (the reserved slot by default), documented as such in the UI so it's not a surprise when a built-in animated card ignores them
+- A live canvas preview (128×64, scaled up) next to the fields that updates as you type/change settings, before you save - catches clipped/overflowing text and bad alignment choices before they reach the real device
+- "Save" is one combined action (text + alignment + corner emoji + animation duration together, one revision bump) and "make active" is separate - not a pile of per-field save buttons
+- Desktop: fields on the left, live preview on the right, sized to fit without scrolling the page. Mobile: stacks vertically - fields/buttons first, emoji pickers next, live preview last
 
 ---
 
@@ -156,8 +158,6 @@ This is the concrete answer to "should this be an app" from the earlier local-ho
 
 ## 10. Open decisions
 
-- Which hosting option to start at (recommend starting at #1 in §7 just to prove the contract works, then jumping to #2 rather than #3 — don't build the nice UI before confirming the basic loop is solid)
 - Whether the site needs its own login now or can stay an obscure URL for now (low stakes while it's just for personal use)
-- Whether to build the OLED live-preview now or treat it as a nice-to-have once the basic form works
 - Whether local-on-phone hosting (§8) is still worth pursuing given the PWA decision covers the "feels like an app" goal without it — probably not, but flagging since it was raised
 - Icon/branding for the PWA manifest — needs at least a simple logo

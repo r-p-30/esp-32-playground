@@ -27,6 +27,9 @@ ONE_SHOT_NEUTRAL = {
     "showCard": None,
     "cardTextIndex": None,
     "cardText": None,
+    "cardTextAlignH": None,
+    "cardTextAlignV": None,
+    "cardCornerEmoji": None,
     "buzz": False,
     "triggerAnimation": False,
     "identifyPing": False,
@@ -38,9 +41,6 @@ ONE_SHOT_NEUTRAL = {
 CONTINUOUS_DEFAULTS = {
     "carouselEnabled": False,
     "carouselIntervalSec": 8,
-    "randomNotifyEnabled": False,
-    "randomNotifyMinSec": 60,
-    "randomNotifyMaxSec": 300,
     "nightModeEnabled": False,
     "gameModeEnabled": False,
 }
@@ -107,6 +107,18 @@ def set_card_text(index, text):
 def set_card_animation_duration(index, duration_ms):
     cards = load_cards()
     cards[index]["animationDurationMs"] = duration_ms
+    save_cards(cards)
+
+
+def set_card_layout(index, align_h, align_v, corner_emoji):
+    """corner_emoji: list of 4 shortcode strings (or "" for none), in
+    [topLeft, topRight, bottomLeft, bottomRight] order - only visible on
+    the device for cards using the generic ANIM_BOUNCE layout (i.e. the
+    reserved/custom card), see Cards.h."""
+    cards = load_cards()
+    cards[index]["alignH"] = align_h
+    cards[index]["alignV"] = align_v
+    cards[index]["cornerEmoji"] = corner_emoji
     save_cards(cards)
 
 

@@ -171,9 +171,6 @@ void loop() {
   if (consumeRemoteAnimationTrigger() && mode == MODE_CARDS && !nightModeActive) {
     triggerAnimation();
   }
-  if (consumeRandomNotify()) {
-    playRandomPing();
-  }
   if (consumeIdentifyPing()) {
     playIdentifyPing();
     flashIdentify();

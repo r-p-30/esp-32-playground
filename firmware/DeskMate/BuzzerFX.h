@@ -13,10 +13,6 @@ void playChime();
 // different from beepCardChange() and playChime() so it stands out.
 void playIncomingMessage();
 
-// Single soft ping for the random "notification" feature - distinct from
-// the other three so it reads as ambient, not a real incoming message.
-void playRandomPing();
-
 // Two quick identical beeps for the remote "identify" ping - confirms an
 // update reached the device without touching card content.
 void playIdentifyPing();

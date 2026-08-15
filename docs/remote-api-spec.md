@@ -39,13 +39,13 @@ action, a card edit) - see "push, not poll" below.
   "buzz": true,
   "triggerAnimation": true,
   "identifyPing": false,
+  "cardTextAlignH": "center",
+  "cardTextAlignV": "middle",
+  "cardCornerEmoji": [":heart:", "", "", ""],
   "cardAnimationDurationIndex": 1,
   "cardAnimationDurationMs": 2200,
   "carouselEnabled": false,
   "carouselIntervalSec": 8,
-  "randomNotifyEnabled": false,
-  "randomNotifyMinSec": 60,
-  "randomNotifyMaxSec": 300,
   "nightModeEnabled": false,
   "gameModeEnabled": false
 }
@@ -82,6 +82,20 @@ Fields split into two groups that behave differently:
   reordered there — check that file directly if you need the current
   index for a specific card rather than relying on this doc staying
   perfectly in sync.
+- **`cardTextAlignH`** (`"left"` / `"center"` / `"right"`, optional) and
+  **`cardTextAlignV`** (`"top"` / `"middle"` / `"bottom"`, optional) — set
+  together, tied to `cardTextIndex` like `cardText` above. **Only visible
+  on cards using the generic bounce layout** (the reserved/custom slot by
+  default) — every built-in animated card has its own fixed hand-drawn
+  layout that ignores these. Send both together even if only one changed,
+  so a partial update can't leave the other axis stale (see
+  `RemoteControl.cpp`).
+- **`cardCornerEmoji`** (array of 4 shortcode strings, optional, tied to
+  `cardTextIndex`) — small decorative glyphs pinned to each corner,
+  independent of the main text: `[topLeft, topRight, bottomLeft,
+  bottomRight]`. Use `""` for no decoration in that corner. Same
+  shortcode list as the emoji table below; same bounce-layout-only
+  caveat as alignment above.
 - **`cardAnimationDurationIndex`** + **`cardAnimationDurationMs`** (number
   + number, optional, sent as a pair) — overwrites how long that card's
   short-press animation runs, in milliseconds. Meant for tuning/testing
@@ -121,12 +135,6 @@ jumping to it or buzzing.
 - **`carouselIntervalSec`** (number, default 5) — how often it advances.
   The timer resets on *any* card change (manual, remote jump, or
   carousel), so it always measures "time since the last change."
-- **`randomNotifyEnabled`** (boolean, default false) — when true, the
-  device plays a soft single ping at a random interval, purely ambient
-  (distinct sound from `buzz`, doesn't change what's on screen).
-- **`randomNotifyMinSec`** / **`randomNotifyMaxSec`** (numbers, default
-  60 / 300) — the random interval range. A fresh random delay within this
-  range is picked after each ping (and once, whenever this gets enabled).
 - **`nightModeEnabled`** (boolean, default false) — remote equivalent of a
   5-second press-and-hold on the knob (see button reference below):
   dims the screen and shows a full-screen inverted clock instead of
@@ -135,9 +143,9 @@ jumping to it or buzzing.
   2-second press-and-hold: switches to the game-mode placeholder screen
   (the actual game isn't built yet). Ignored while night mode is active.
 
-`carouselEnabled` and `randomNotifyEnabled` behave exactly as described
-above — the device just keeps applying whatever value came in the last
-push, so leaving them absent/false is a safe default.
+`carouselEnabled` behaves exactly as described above — the device just
+keeps applying whatever value came in the last push, so leaving it
+absent/false is a safe default.
 
 **`nightModeEnabled` and `gameModeEnabled` behave differently, because
 they can also be toggled by the physical button:** the device only reacts

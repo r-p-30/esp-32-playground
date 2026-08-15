@@ -41,18 +41,6 @@
 </section>
 
 <section class="card">
-  <h2>Random notify</h2>
-  <form method="post" action="{{ url_for('action_random_notify') }}" class="stack-form">
-    <label><input type="checkbox" name="enabled" {% if state.randomNotifyEnabled %}checked{% endif %}> Enabled</label>
-    <label for="minSec">Min seconds</label>
-    <input type="number" id="minSec" name="minSec" min="1" value="{{ state.randomNotifyMinSec }}">
-    <label for="maxSec">Max seconds</label>
-    <input type="number" id="maxSec" name="maxSec" min="1" value="{{ state.randomNotifyMaxSec }}">
-    <button type="submit">Save</button>
-  </form>
-</section>
-
-<section class="card">
   <h2>Night mode / game mode</h2>
   <p class="hint">Send-only - these don't reflect what's currently active on the device (see status line above for that).</p>
   <div class="button-row">

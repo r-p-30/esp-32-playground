@@ -32,11 +32,6 @@ static bool carouselWasEnabledLastPoll = false;
 // running forever unattended.
 #define CAROUSEL_MAX_RUNTIME_MS (60UL * 60UL * 1000UL)
 
-static bool randomNotifyEnabled = false;
-static unsigned long randomNotifyMinMs = 60000;
-static unsigned long randomNotifyMaxMs = 300000;
-static unsigned long nextRandomNotifyAtMs = 0;
-
 static bool nightModeRawLastPoll = false;
 static bool gameModeRawLastPoll = false;
 static int pendingNightModeChange = -1;  // -1 none, 0 off, 1 on
@@ -61,6 +56,20 @@ static bool remoteApiConfigured() {
   return strcmp(REMOTE_API_URL, "wss://your-site.example/ws/device") != 0;
 }
 
+static TextAlignH parseAlignH(const char* s) {
+  if (s == nullptr) return ALIGN_H_CENTER;
+  if (strcmp(s, "left") == 0) return ALIGN_H_LEFT;
+  if (strcmp(s, "right") == 0) return ALIGN_H_RIGHT;
+  return ALIGN_H_CENTER;
+}
+
+static TextAlignV parseAlignV(const char* s) {
+  if (s == nullptr) return ALIGN_V_MIDDLE;
+  if (strcmp(s, "top") == 0) return ALIGN_V_TOP;
+  if (strcmp(s, "bottom") == 0) return ALIGN_V_BOTTOM;
+  return ALIGN_V_MIDDLE;
+}
+
 static void applyStateJson(const uint8_t* payload, size_t length) {
   StaticJsonDocument<512> doc;
   if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
@@ -78,14 +87,6 @@ static void applyStateJson(const uint8_t* payload, size_t length) {
   long carouselSec = doc["carouselIntervalSec"] | 5L;
   if (carouselSec < 1) carouselSec = 1;
   carouselIntervalMs = (unsigned long)carouselSec * 1000UL;
-
-  randomNotifyEnabled = doc["randomNotifyEnabled"] | false;
-  long minSec = doc["randomNotifyMinSec"] | 60L;
-  long maxSec = doc["randomNotifyMaxSec"] | 300L;
-  if (minSec < 1) minSec = 1;
-  if (maxSec < minSec) maxSec = minSec;
-  randomNotifyMinMs = (unsigned long)minSec * 1000UL;
-  randomNotifyMaxMs = (unsigned long)maxSec * 1000UL;
 
   // Night/game mode: edge-triggered on the site's value changing, not
   // blindly reasserted - see RemoteControl.h for why.
@@ -106,8 +107,26 @@ static void applyStateJson(const uint8_t* payload, size_t length) {
   if (revision >= 0 && revision != lastAppliedRevision) {
     lastAppliedRevision = revision;
 
-    if (!doc["cardText"].isNull() && !doc["cardTextIndex"].isNull()) {
-      setCardText(doc["cardTextIndex"].as<int>(), doc["cardText"].as<const char*>());
+    if (!doc["cardTextIndex"].isNull()) {
+      int idx = doc["cardTextIndex"].as<int>();
+
+      if (!doc["cardText"].isNull()) {
+        setCardText(idx, doc["cardText"].as<const char*>());
+      }
+      // Layout - only visible on the ANIM_BOUNCE (custom/reserved-slot)
+      // card, see Card's comment in Cards.h. Both sent together whenever
+      // either changes, so a partial update can't leave one axis stale.
+      if (!doc["cardTextAlignH"].isNull() || !doc["cardTextAlignV"].isNull()) {
+        setCardAlignment(idx,
+                          parseAlignH(doc["cardTextAlignH"] | (const char*)nullptr),
+                          parseAlignV(doc["cardTextAlignV"] | (const char*)nullptr));
+      }
+      if (doc["cardCornerEmoji"].is<JsonArray>()) {
+        JsonArray corners = doc["cardCornerEmoji"].as<JsonArray>();
+        for (int c = 0; c < 4 && c < (int)corners.size(); c++) {
+          setCardCornerEmoji(idx, c, emojiShortcodeToGlyph(corners[c].as<const char*>()));
+        }
+      }
     }
     if (!doc["showCard"].isNull()) {
       pendingCardJump = doc["showCard"].as<int>();
@@ -219,30 +238,6 @@ bool isCarouselEnabled() {
 
 unsigned long getCarouselIntervalMs() {
   return carouselIntervalMs;
-}
-
-static void scheduleNextRandomNotify(unsigned long now) {
-  unsigned long span = (randomNotifyMaxMs > randomNotifyMinMs) ? (randomNotifyMaxMs - randomNotifyMinMs) : 0;
-  unsigned long delay = randomNotifyMinMs + (span > 0 ? (unsigned long)random((long)span) : 0);
-  nextRandomNotifyAtMs = now + delay;
-}
-
-bool consumeRandomNotify() {
-  if (!randomNotifyEnabled) {
-    nextRandomNotifyAtMs = 0;  // so re-enabling later picks a fresh random delay
-    return false;
-  }
-
-  unsigned long now = millis();
-  if (nextRandomNotifyAtMs == 0) {
-    scheduleNextRandomNotify(now);
-    return false;
-  }
-  if (now >= nextRandomNotifyAtMs) {
-    scheduleNextRandomNotify(now);
-    return true;
-  }
-  return false;
 }
 
 int consumeRemoteNightModeChange() {

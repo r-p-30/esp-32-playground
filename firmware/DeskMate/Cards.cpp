@@ -82,20 +82,32 @@ const Card& getCardContent(int index) {
 // (multi-byte UTF-8 just comes out as garbled box-drawing characters) -
 // but it does include a handful of IBM CP437 "symbol" glyphs (hearts,
 // suits, musical notes, smileys) as single bytes. The site should send
-// these shortcodes rather than raw emoji; this swaps them in-place before
-// the text is stored. See docs/remote-api-spec.md for the supported list.
+// these shortcodes rather than raw emoji. See docs/remote-api-spec.md for
+// the supported list. Shared by applyEmojiShortcodes() (inline in card
+// text) and emojiShortcodeToGlyph() (corner-emoji decorations).
+static const struct { const char* code; char glyph; } EMOJI_SHORTCODES[] = {
+  { ":heart:", (char)0x03 },
+  { ":smile:", (char)0x01 },
+  { ":smileb:", (char)0x02 },
+  { ":spade:", (char)0x06 },
+  { ":club:", (char)0x05 },
+  { ":diamond:", (char)0x04 },
+  { ":note:", (char)0x0D },
+  { ":notes:", (char)0x0E },
+};
+static const int NUM_EMOJI_SHORTCODES = sizeof(EMOJI_SHORTCODES) / sizeof(EMOJI_SHORTCODES[0]);
+
+char emojiShortcodeToGlyph(const char* code) {
+  if (code == nullptr || code[0] == '\0') return 0;
+  for (int i = 0; i < NUM_EMOJI_SHORTCODES; i++) {
+    if (strcmp(code, EMOJI_SHORTCODES[i].code) == 0) return EMOJI_SHORTCODES[i].glyph;
+  }
+  return 0;
+}
+
 static void applyEmojiShortcodes(char* text) {
-  static const struct { const char* code; char glyph; } table[] = {
-    { ":heart:", (char)0x03 },
-    { ":smile:", (char)0x01 },
-    { ":smileb:", (char)0x02 },
-    { ":spade:", (char)0x06 },
-    { ":club:", (char)0x05 },
-    { ":diamond:", (char)0x04 },
-    { ":note:", (char)0x0D },
-    { ":notes:", (char)0x0E },
-  };
-  const int numCodes = sizeof(table) / sizeof(table[0]);
+  const auto& table = EMOJI_SHORTCODES;
+  const int numCodes = NUM_EMOJI_SHORTCODES;
 
   char* src = text;
   char* dst = text;
@@ -131,6 +143,18 @@ void setCardText(int index, const char* text) {
 void setCardAnimationDuration(int index, uint16_t durationMs) {
   int wrapped = ((index % NUM_CARDS) + NUM_CARDS) % NUM_CARDS;
   cards[wrapped].animationDurationMs = durationMs;
+}
+
+void setCardAlignment(int index, TextAlignH alignH, TextAlignV alignV) {
+  int wrapped = ((index % NUM_CARDS) + NUM_CARDS) % NUM_CARDS;
+  cards[wrapped].alignH = alignH;
+  cards[wrapped].alignV = alignV;
+}
+
+void setCardCornerEmoji(int index, int corner, char glyph) {
+  if (corner < 0 || corner > 3) return;
+  int wrapped = ((index % NUM_CARDS) + NUM_CARDS) % NUM_CARDS;
+  cards[wrapped].cornerEmoji[corner] = glyph;
 }
 
 static bool isCardVisible(int index) {
