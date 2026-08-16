@@ -32,6 +32,10 @@ main {
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
+  /* Without an explicit z-index, native form controls (radio/checkbox)
+     get their own compositing layer on mobile Safari/Chrome and paint
+     over a sticky header that has none while scrolling. */
+  z-index: 10;
 }
 
 .topnav a {
