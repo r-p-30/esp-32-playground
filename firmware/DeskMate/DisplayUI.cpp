@@ -89,18 +89,6 @@ static void drawAnimatedGlyph(EmojiAnimFamily family, int x, int y, float progre
       display.print(g);
       break;
     }
-    case EMOJI_ANIM_SPARKLE: {
-      float p = fmodf(progress * 8.0f, 1.0f);
-      if (p < 0.55f) {
-        display.setCursor(x, y);
-        display.print((char)0x0F);
-        if (p < 0.15f) {
-          display.drawPixel(x - 2 * textSize, y + 3 * textSize, SSD1306_WHITE);
-          display.drawPixel(x + 7 * textSize, y + 3 * textSize, SSD1306_WHITE);
-        }
-      }
-      break;
-    }
     case EMOJI_ANIM_DIAMOND: {
       display.setCursor(x, y);
       display.print((char)0x04);
@@ -123,22 +111,79 @@ static void drawAnimatedGlyph(EmojiAnimFamily family, int x, int y, float progre
       display.print(g);
       break;
     }
-    case EMOJI_ANIM_SNOWFLAKE: {
-      // No true rotation available for a fixed glyph, so "spin" is
-      // simulated by orbiting the dot around its base position through
-      // 4 sub-positions per cycle.
-      float p = fmodf(progress * 3.0f, 1.0f);
-      int step = (int)(p * 4.0f) % 4;
-      static const int8_t ox[4] = { 0, 1, 0, -1 };
-      static const int8_t oy[4] = { -1, 0, 1, 0 };
-      display.setCursor(x + ox[step] * (int)textSize, y + oy[step] * (int)textSize);
-      display.print((char)0x07);
-      break;
-    }
     default:
+      // EMOJI_ANIM_SPARKLE and EMOJI_ANIM_SNOWFLAKE aren't handled here -
+      // CP437 doesn't have glyphs that actually read as either shape, so
+      // both are drawn as real vector shapes instead (drawSparkleGlyph()/
+      // drawSnowflakeGlyph() below), called directly from printAligned()/
+      // drawCornerEmoji() rather than through this glyph-swap dispatcher.
       break;
   }
   display.setTextSize(1);
+}
+
+// Sparkle: reuses the same 4-point cross already used on the good-night
+// card (drawSparkle() below) rather than a CP437 glyph - the closest
+// available CP437 character is a sun-with-rays, which reads as a sun, not
+// a sparkle. "Shine" is a radius pulse. x/y is the same top-left cursor
+// position a plain glyph print would have used.
+static void drawSparkleGlyph(int x, int y, uint8_t textSize, bool animating, float progress) {
+  int cx = x + 2 * textSize;
+  int cy = y + 3 * textSize;
+  int r = 3 * textSize;
+  if (animating) {
+    float pulse = 0.5f + 0.5f * fabsf(sinf(progress * PI * 4.0f));
+    r = (int)(r * pulse);
+    if (r < 1) r = 1;
+  }
+  display.drawLine(cx - r, cy, cx + r, cy, SSD1306_WHITE);
+  display.drawLine(cx, cy - r, cx, cy + r, SSD1306_WHITE);
+}
+
+// Snowflake: a real 6-armed asterisk (3 lines through the center, 60°
+// apart) instead of a glyph - CP437 has no snowflake, and this shape
+// gets genuine rotation for the "spin" animation, which no fixed glyph
+// swap could do.
+// Reused as-is from the Adafruit_SSD1306 example sketch's falling-icon
+// demo (firmware/sanity-checks/display_hello_world/display_hello_world.ino,
+// logo_bmp/testanimate()) - the actual Adafruit logo shape, not a
+// geometric snowflake, but this is the specific bitmap asked for.
+static const unsigned char PROGMEM SNOWFLAKE_BMP[] = {
+  0b00000000, 0b11000000,
+  0b00000001, 0b11000000,
+  0b00000001, 0b11000000,
+  0b00000011, 0b11100000,
+  0b11110011, 0b11100000,
+  0b11111110, 0b11111000,
+  0b01111110, 0b11111111,
+  0b00110011, 0b10011111,
+  0b00011111, 0b11111100,
+  0b00001101, 0b01110000,
+  0b00011011, 0b10100000,
+  0b00111111, 0b11100000,
+  0b00111111, 0b11110000,
+  0b01111100, 0b11110000,
+  0b01110000, 0b01110000,
+  0b00000000, 0b00110000
+};
+#define SNOWFLAKE_BMP_W 16
+#define SNOWFLAKE_BMP_H 16
+
+// No true rotation is possible for a fixed bitmap (Adafruit_GFX doesn't
+// support rotating drawBitmap()), so "spin" orbits its position slightly
+// instead - same trick as the retired glyph-based version, still reads
+// as "in motion" rather than static.
+static void drawSnowflakeGlyph(int x, int y, uint8_t textSize, bool animating, float progress) {
+  int ox = 0, oy = 0;
+  if (animating) {
+    float p = fmodf(progress * 3.0f, 1.0f);
+    int step = (int)(p * 4.0f) % 4;
+    static const int8_t dx[4] = { 0, 1, 0, -1 };
+    static const int8_t dy[4] = { -1, 0, 1, 0 };
+    ox = dx[step] * (int)textSize;
+    oy = dy[step] * (int)textSize;
+  }
+  display.drawBitmap(x + ox, y + oy, SNOWFLAKE_BMP, SNOWFLAKE_BMP_W, SNOWFLAKE_BMP_H, SSD1306_WHITE);
 }
 
 // Generalized version of printCentered with per-axis alignment, used only
@@ -202,13 +247,22 @@ static void printAligned(const char* text, TextAlignH alignH, TextAlignV alignV,
       EmojiAnimFamily family = glyphToEmojiAnimFamily(c);
       bool animateThis = animating && family != EMOJI_ANIM_NONE &&
                           !(animDisableMask & (1 << family));
-      if (animateThis) {
+      if (family == EMOJI_ANIM_SPARKLE) {
+        drawSparkleGlyph(cx, y, 1, animateThis, progress);
+        cx += 6;
+      } else if (family == EMOJI_ANIM_SNOWFLAKE) {
+        // 16px-wide bitmap, not a 6px text-cell glyph - needs a wider
+        // advance so the next character doesn't land on top of it.
+        drawSnowflakeGlyph(cx, y, 1, animateThis, progress);
+        cx += SNOWFLAKE_BMP_W;
+      } else if (animateThis) {
         drawAnimatedGlyph(family, cx, y, progress, 1);
+        cx += 6;
       } else {
         display.setCursor(cx, y);
         display.print(c);
+        cx += 6;
       }
-      cx += 6;
     }
 
     y += lineHeight;
@@ -223,14 +277,25 @@ static void printAligned(const char* text, TextAlignH alignH, TextAlignV alignV,
 // at the default size these single CP437 glyphs are ~5x7px and read as
 // little more than a dot on a 128x64 screen.
 static void drawCornerEmoji(const char cornerEmoji[4], bool animating, float progress, uint8_t animDisableMask) {
-  static const int cx[4] = { 3, OLED_WIDTH - 15, 3, OLED_WIDTH - 15 };
+  // Symmetric 3px inset on every side - a 2x-size glyph cell is 10x14px,
+  // so the right/bottom corners subtract cell size + inset from the edge.
+  static const int cx[4] = { 3, OLED_WIDTH - 13, 3, OLED_WIDTH - 13 };
   static const int cy[4] = { 3, 3, OLED_HEIGHT - 17, OLED_HEIGHT - 17 };
+  // Snowflake is a 16x16 bitmap, bigger than the other corner glyphs'
+  // 10x14 cell - same symmetric 3px inset, but sized for its own bounds
+  // so it doesn't run past the right/bottom edge.
+  static const int snowCx[4] = { 3, OLED_WIDTH - 19, 3, OLED_WIDTH - 19 };
+  static const int snowCy[4] = { 3, 3, OLED_HEIGHT - 19, OLED_HEIGHT - 19 };
   for (int i = 0; i < 4; i++) {
     if (cornerEmoji[i] == 0) continue;
     EmojiAnimFamily family = glyphToEmojiAnimFamily(cornerEmoji[i]);
     bool animateThis = animating && family != EMOJI_ANIM_NONE &&
                         !(animDisableMask & (1 << family));
-    if (animateThis) {
+    if (family == EMOJI_ANIM_SPARKLE) {
+      drawSparkleGlyph(cx[i], cy[i], 2, animateThis, progress);
+    } else if (family == EMOJI_ANIM_SNOWFLAKE) {
+      drawSnowflakeGlyph(snowCx[i], snowCy[i], 2, animateThis, progress);
+    } else if (animateThis) {
       drawAnimatedGlyph(family, cx[i], cy[i], progress, 2);
     } else {
       display.setTextSize(2);
@@ -976,10 +1041,53 @@ static void drawEqualizer(const Card& card, bool animating, float progress) {
   }
 }
 
+// Continuous ambient "screensaver" - reuses the exact falling-icon
+// mechanism from the Adafruit_SSD1306 example sketch's testanimate()
+// (firmware/sanity-checks/display_hello_world/display_hello_world.ino),
+// just redrawn incrementally each tick instead of that demo's blocking
+// for(;;) loop, so it fits the same live-redraw pattern as the clock/
+// equalizer cards below. animating/progress are intentionally unused -
+// like those two, this ignores short-press entirely and just keeps
+// running on its own (see updateDisplayAnimation()).
+#define SNOWFALL_COUNT 6
+static void drawSnowfall(const Card& card, bool animating, float progress) {
+  (void)animating;
+  (void)progress;
+
+  static int8_t flakeX[SNOWFALL_COUNT];
+  static int8_t flakeY[SNOWFALL_COUNT];
+  static int8_t flakeDY[SNOWFALL_COUNT];
+  static bool initialized = false;
+
+  if (!initialized) {
+    for (int f = 0; f < SNOWFALL_COUNT; f++) {
+      flakeX[f] = random(1 - SNOWFLAKE_BMP_W, OLED_WIDTH);
+      flakeY[f] = -SNOWFLAKE_BMP_H;
+      flakeDY[f] = random(1, 4);
+    }
+    initialized = true;
+  }
+
+  printCentered(card.text, 2, 14, 9);
+
+  for (int f = 0; f < SNOWFALL_COUNT; f++) {
+    display.drawBitmap(flakeX[f], flakeY[f], SNOWFLAKE_BMP, SNOWFLAKE_BMP_W, SNOWFLAKE_BMP_H, SSD1306_WHITE);
+  }
+
+  for (int f = 0; f < SNOWFALL_COUNT; f++) {
+    flakeY[f] += flakeDY[f];
+    if (flakeY[f] >= OLED_HEIGHT) {
+      flakeX[f] = random(1 - SNOWFLAKE_BMP_W, OLED_WIDTH);
+      flakeY[f] = -SNOWFLAKE_BMP_H;
+      flakeDY[f] = random(1, 4);
+    }
+  }
+}
+
 static void drawBounce(const Card& card, bool animating, float progress) {
   printAligned(card.text, card.alignH, card.alignV, 4, OLED_WIDTH - 4, 0, OLED_HEIGHT, 9,
                animating, progress, card.animatedEmojiDisableMask);
-  if (animating) {
+  if (animating && !(card.animatedEmojiDisableMask & (1 << BORDER_FLASH_DISABLE_BIT))) {
     // Border-flash: a ring inset from the permanent frame blinks on/off -
     // this layout's "something is happening" cue. The permanent outer
     // frame (drawn by drawCardFrame() after this returns) stays solid
@@ -1021,6 +1129,7 @@ static void drawCardFrame(int index, bool animating, float progress) {
     case ANIM_CLOCK:         drawClock(card, animating, progress); break;
     case ANIM_EQUALIZER:     drawEqualizer(card, animating, progress); break;
     case ANIM_DUCK_FLUSH:    drawDuckFlush(card, animating, progress); break;
+    case ANIM_SNOWFALL:      drawSnowfall(card, animating, progress); break;
     case ANIM_BOUNCE:
     default:                 drawBounce(card, animating, progress); break;
   }
@@ -1051,6 +1160,7 @@ void initDisplay() {
 
 static char lastClockTimeStr[10] = "";
 static unsigned long lastEqualizerRedrawMs = 0;
+static unsigned long lastSnowfallRedrawMs = 0;
 
 void showCard(int index) {
   currentlyShownCard = index;
@@ -1103,6 +1213,16 @@ void updateDisplayAnimation() {
     unsigned long now = millis();
     if (now - lastEqualizerRedrawMs >= 120) {
       lastEqualizerRedrawMs = now;
+      drawCardFrame(currentlyShownCard, false, 0.0f);
+    }
+  }
+
+  // Live redraw for the snowfall screensaver card - flakes keep falling
+  // on their own, same pattern as the equalizer bars above.
+  if (liveAnim == ANIM_SNOWFALL) {
+    unsigned long now = millis();
+    if (now - lastSnowfallRedrawMs >= 150) {
+      lastSnowfallRedrawMs = now;
       drawCardFrame(currentlyShownCard, false, 0.0f);
     }
   }

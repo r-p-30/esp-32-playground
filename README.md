@@ -25,8 +25,10 @@ in `firmware/DeskMate/Config.h`.
 
 ## What it does
 
-**21 content cards** (plus 1 reserved empty slot), each with its own
-short-press animation.
+**22 content cards** (plus 1 reserved empty slot), each with its own
+short-press animation - except the clock, equalizer, and a falling-icon
+screensaver card, which redraw continuously on their own and ignore
+short-press entirely.
 
 **Three physical button tiers** on the encoder's push-button:
 

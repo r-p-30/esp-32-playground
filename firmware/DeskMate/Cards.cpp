@@ -69,6 +69,11 @@ Card cards[] = {
   { "-- empty slot --\n\nnothing here\nyet", nullptr, 0, 0, ANIM_BOUNCE, false, ANIMATION_DURATION_MS },
    
   { "good night", nullptr, 0, 0, ANIM_MOON_SPARKLE, true, ANIMATION_DURATION_MS },
+
+  // Ambient screensaver - no press animation, just keeps falling on its
+  // own like the equalizer/clock cards above (see updateDisplayAnimation()
+  // in DisplayUI.cpp).
+  { "let it snow", nullptr, 0, 0, ANIM_SNOWFALL, true, ANIMATION_DURATION_MS },
 };
 
 const uint8_t NUM_CARDS = sizeof(cards) / sizeof(cards[0]);

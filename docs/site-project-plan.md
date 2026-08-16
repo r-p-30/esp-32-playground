@@ -59,7 +59,7 @@ The site needs to persist one "current state" blob — this is what gets pushed 
 }
 ```
 
-Plus, separately (for the UI's own use, not sent to the device): the site should keep its **own copy of all 21 content cards' current text**, so the card manager can show "what's on the device right now" rather than a blank form. The device is the source of truth for what's actually displaying, but the site can't read that back (one-directional, see §6) — so the site's copy is really "what we last told it," which is a reasonable approximation as long as nobody edits cards by any other means.
+Plus, separately (for the UI's own use, not sent to the device): the site should keep its **own copy of all 22 content cards' current text**, so the card manager can show "what's on the device right now" rather than a blank form. The device is the source of truth for what's actually displaying, but the site can't read that back on its own (one-directional, see §6) — mitigated by the device reporting its full card list back once per connect (`cardsReport`, `sendCardsReport()` in `RemoteControl.cpp`), which the site treats as authoritative and resyncs its cache from.
 
 **Card order isn't fixed** — it's just array order in `firmware/DeskMate/Cards.cpp`, and it's already been reordered once during development. The reserved empty slot (index 20 as of this writing) isn't guaranteed to sit at the end — don't assume "reserved slots are the last N indices" anywhere in the site's logic. Pull the current order from `Cards.cpp` directly when building the card manager rather than hardcoding indices from this doc.
 

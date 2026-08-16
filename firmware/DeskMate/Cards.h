@@ -27,6 +27,7 @@ enum CardAnimation : uint8_t {
   ANIM_CLOCK,
   ANIM_DUCK_FLUSH,
   ANIM_EQUALIZER,  // no press animation - bars move continuously on their own
+  ANIM_SNOWFALL,   // no press animation - falling icons keep going continuously, screensaver-style
 };
 
 // Zero-valued members (CENTER/MIDDLE/no corner emoji) intentionally match
@@ -51,6 +52,13 @@ enum EmojiAnimFamily : uint8_t {
   EMOJI_ANIM_SNOWFLAKE = 5,
   EMOJI_ANIM_NONE = 255,
 };
+
+// Not an emoji family, but reuses the same Card::animatedEmojiDisableMask
+// bitmask (see below) - unlike the families above, this one always shows
+// a toggle in the site UI regardless of what's on the card, since the
+// border-flash is drawn on every card using the bounce layout, not just
+// ones with a specific emoji present.
+#define BORDER_FLASH_DISABLE_BIT 6
 
 struct Card {
   char text[CARD_TEXT_LEN];  // mutable - remote updates write directly here

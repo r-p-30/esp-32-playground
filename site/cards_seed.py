@@ -29,6 +29,7 @@ SEED_CARDS = [
     {"index": 19, "text": "shit happens!\nflush it &\nmove on", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
     {"index": 20, "text": "-- empty slot --\n\nnothing here\nyet", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": False},
     {"index": 21, "text": "good night", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
+    {"index": 22, "text": "let it snow", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
 ]
 
 # Layout defaults - only visible on the device for cards using the generic

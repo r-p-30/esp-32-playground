@@ -66,15 +66,16 @@ Fields split into two groups that behave differently:
   turning the knob). You can freely turn the knob again right
   after — this is a one-time nudge, not a lock.
 - **`cardTextIndex`** + **`cardText`** (number + string, optional, sent as
-  a pair) — overwrites the text of the card at that index. There are 22
-  cards total (index 0-21). **Index 20 is the reserved empty slot**
+  a pair) — overwrites the text of the card at that index. There are 23
+  cards total (index 0-22). **Index 20 is the reserved empty slot**
   (writing to it is how you "add" a new card without reflashing) — every
-  other index, 0-19 and 21, is a confirmed content card you can edit.
+  other index, 0-19, 21, and 22, is a confirmed content card you can edit.
   Card 0 is "right now" (clock), shown at boot only if the device
   actually synced real time this boot; otherwise boot falls back to card 1
   ("good morning") - see `DeskMate.ino`'s `setup()`. Exiting night mode
   always lands on card 1 regardless of sync status. Card 5 (music
-  equalizer) and card 0 (clock) have no press-animation since both
+  equalizer), card 0 (clock), and card 22 (a screensaver-style falling
+  animation, always running) have no press-animation since all three
   redraw continuously on their own. Card text supports `\n` for line
   breaks, and a small set of emoji shortcodes (see below).
 
@@ -176,18 +177,24 @@ people type arbitrary emoji:
 | `:heart:` | ♥ | heart |
 | `:smile:` | ☺ | smile |
 | `:smileb:` | ☻ (filled) | smile |
-| `:sparkle:` | ☼ | sparkle |
+| `:sparkle:` | a drawn 4-point cross (not a font glyph) | sparkle |
 | `:diamond:` | ♦ | diamond |
 | `:note:` | ♪ | notes |
 | `:notes:` | ♫ | notes |
-| `:snowflake:` | • | snowflake |
+| `:snowflake:` | a 16x16 bitmap (not a font glyph) | snowflake |
 
-Worth a visual check on real hardware once flashed — these are standard
-CP437 codepoints but I haven't been able to render-test them myself. No
-`:spade:`/`:club:` anymore (removed - not used) and no true snowflake
-glyph exists in CP437, so `:snowflake:` reuses the plain bullet/circle
-character (0x07) as the closest safe stand-in that normal typed text
-would never produce by accident.
+Worth a visual check on real hardware once flashed for the font-based
+ones — standard CP437 codepoints, but I haven't been able to
+render-test them myself. No `:spade:`/`:club:` anymore (removed - not
+used). `:sparkle:` and `:snowflake:` aren't CP437 glyphs at all - CP437's
+closest sparkle option is a sun-with-rays (reads as a sun) and it has no
+snowflake shape whatsoever, so both are drawn as actual images instead:
+sparkle is a small drawn cross (`drawSparkleGlyph()` in `DisplayUI.cpp`,
+reusing the same shape already on the good-night card), and snowflake is
+a 16x16 bitmap reused verbatim from the Adafruit_SSD1306 example sketch's
+falling-icon demo (`firmware/sanity-checks/display_hello_world/`,
+`logo_bmp`) - it's actually the Adafruit logo shape, not a geometric
+snowflake, but that's the specific image this project uses for it.
 
 ### Default per-emoji animations
 
@@ -196,18 +203,25 @@ shortcodes, notes covers both note shortcodes) gets a small built-in
 animation during the card's press-animation window, **only on cards
 using the generic bounce layout** (same caveat as alignment/corner
 decorations - see above) - heart beats, smile alternates between the
-outline/filled glyph, sparkle twinkles, diamond bursts a little, notes
-cycles single/double with a bob, snowflake orbits in a small circle (see
-`drawAnimatedGlyph()` in `DisplayUI.cpp`). This applies to the glyph
-wherever it appears - inline in the text or as a corner decoration.
+outline/filled glyph, sparkle pulses its cross wider/narrower, diamond
+bursts a little, notes cycles single/double with a bob, snowflake nudges
+its position each frame (no true rotation is possible for a fixed bitmap)
+(see `drawAnimatedGlyph()`/`drawSparkleGlyph()`/`drawSnowflakeGlyph()` in
+`DisplayUI.cpp`). This applies to the glyph wherever it appears - inline
+in the text or as a corner decoration.
 
 Animation is **on by default** for every family present on a card;
 `cardAnimatedEmojiDisableMask` (number, optional, tied to `cardTextIndex`
 like the fields above) turns specific families off per-card. Bit *i* set
 = family *i*'s animation is disabled: `0=heart, 1=smile, 2=sparkle,
-3=diamond, 4=notes, 5=snowflake`. The site only exposes a toggle for
-families actually present on the card (no point animating something
-that isn't there) - see `used_emoji_families()` in `site/app.py`.
+3=diamond, 4=notes, 5=snowflake, 6=border-flash` (the last one isn't an
+emoji family - it's the whole-card border-flash effect, see below - but
+reuses the same mask since it's the same kind of per-card animation
+toggle). The site only exposes a toggle for emoji families actually
+present on the card (no point animating something that isn't there) -
+see `used_emoji_families()` in `site/app.py` - but the border-flash
+toggle is always shown regardless of card content, since it applies to
+every card using the bounce layout, not specific emoji.
 
 ## Physical button reference
 
