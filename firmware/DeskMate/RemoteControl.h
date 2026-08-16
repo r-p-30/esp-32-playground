@@ -23,6 +23,18 @@ void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode);
 // then cleared - it's a one-time nudge, not a lock on the knob.
 int consumeRemoteCardJump();
 
+// Returns the index of a card whose content (text/alignment/corner
+// emoji/animation mask) was just updated by a remote push, otherwise -1.
+// Editing a card from the site only sends `showCard` (and thus only
+// triggers consumeRemoteCardJump() above) when "make active" was
+// checked - saving edits to whatever card is *already* on screen doesn't
+// touch showCard at all, so without this the device keeps displaying the
+// stale already-rendered frame until you navigate away and back. The
+// caller (DeskMate.ino) redraws only if this index matches the
+// currently-shown card; a different card's content having changed is a
+// no-op visually, same as before.
+int consumeRemoteContentUpdate();
+
 // Returns true exactly once if a new remote update requested a buzz.
 bool consumeRemoteBuzz();
 

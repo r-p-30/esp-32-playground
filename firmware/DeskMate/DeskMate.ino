@@ -165,6 +165,18 @@ void loop() {
     }
     changeToCard(remoteJump % NUM_CARDS);
   }
+
+  // A card edit from the site that *doesn't* also activate the card (the
+  // "make this card active" checkbox left off) has no showCard to catch
+  // above - if that edit targeted whatever's already on screen, redraw it
+  // here so the change is visible immediately instead of only after
+  // navigating away and back. Skipped when remoteJump already redrew this
+  // same cycle (redundant), and while off the card browser entirely.
+  int contentUpdateIdx = consumeRemoteContentUpdate();
+  if (remoteJump < 0 && contentUpdateIdx == currentCard && mode == MODE_CARDS && !nightModeActive) {
+    showCard(currentCard);
+  }
+
   if (consumeRemoteBuzz()) {
     playIncomingMessage();
   }

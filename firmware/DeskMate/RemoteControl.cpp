@@ -15,6 +15,7 @@ static unsigned long lastHeartbeatSentMs = 0;
 static long lastAppliedRevision = -1;
 
 static int pendingCardJump = -1;
+static int pendingContentUpdateIndex = -1;
 static bool pendingBuzz = false;
 static bool pendingAnimationTrigger = false;
 static bool pendingIdentify = false;
@@ -109,6 +110,12 @@ static void applyStateJson(const uint8_t* payload, size_t length) {
 
     if (!doc["cardTextIndex"].isNull()) {
       int idx = doc["cardTextIndex"].as<int>();
+      // Flagged regardless of whether this same push also includes
+      // showCard - if it does, changeToCard() in DeskMate.ino already
+      // redraws and this is just a harmless redundant one; if it
+      // doesn't (the common "editing the card already on screen" case),
+      // this is the only thing that tells the main loop to redraw.
+      pendingContentUpdateIndex = idx;
 
       if (!doc["cardText"].isNull()) {
         setCardText(idx, doc["cardText"].as<const char*>());
@@ -260,6 +267,12 @@ int consumeRemoteCardJump() {
   int jump = pendingCardJump;
   pendingCardJump = -1;
   return jump;
+}
+
+int consumeRemoteContentUpdate() {
+  int idx = pendingContentUpdateIndex;
+  pendingContentUpdateIndex = -1;
+  return idx;
 }
 
 bool consumeRemoteBuzz() {

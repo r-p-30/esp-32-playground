@@ -140,7 +140,6 @@
       {% set any_used = emoji_families | selectattr('used') | list %}
       <div id="emoji-animations-section"{% if not any_used %} class="hidden"{% endif %}>
         <label class="field-heading">Emoji animations</label>
-        <p class="hint">Shows automatically once that emoji is in the text or a corner above - each defaults to on.</p>
         {% for fam in emoji_families %}
         <div class="toggle-row emoji-toggle-row{% if not fam.used %} hidden{% endif %}" id="emoji-toggle-{{ fam.key }}" data-codes="{{ fam.codes | join(',') }}">
           <span>{{ fam.glyph }} {{ fam.label }}</span>

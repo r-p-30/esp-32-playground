@@ -1056,6 +1056,7 @@ static void drawEqualizer(const Card& card, bool animating, float progress) {
 // running on its own (see updateDisplayAnimation()).
 #define SNOWFALL_COUNT 6
 static void drawSnowfall(const Card& card, bool animating, float progress) {
+  (void)card;
   (void)animating;
   (void)progress;
 
@@ -1073,8 +1074,8 @@ static void drawSnowfall(const Card& card, bool animating, float progress) {
     initialized = true;
   }
 
-  printCentered(card.text, 2, 14, 9);
-
+  // No caption - just the falling stars, screensaver-style (card text is
+  // intentionally not drawn here, unlike every other card).
   for (int f = 0; f < SNOWFALL_COUNT; f++) {
     display.drawBitmap(flakeX[f], flakeY[f], STAR_BMP, STAR_BMP_W, STAR_BMP_H, SSD1306_WHITE);
   }
@@ -1139,8 +1140,12 @@ static void drawCardFrame(int index, bool animating, float progress) {
     default:                 drawBounce(card, animating, progress); break;
   }
 
-  // Permanent frame around every card, regardless of animation state.
-  display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
+  // Permanent frame around every card, regardless of animation state -
+  // except the snowfall screensaver, which is meant to read as an
+  // edge-to-edge ambient effect rather than another framed card.
+  if (card.animation != ANIM_SNOWFALL) {
+    display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
+  }
 
   if (card.bitmap != nullptr) {
     int x = OLED_WIDTH - card.bmpW - 2;
