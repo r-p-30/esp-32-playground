@@ -24,18 +24,20 @@ DEVICE_STATE_FIELDS = list(state.DEFAULT_STATE.keys())
 # Mirrors EmojiAnimFamily in Cards.h - which shortcodes share one default
 # animation/toggle. "bit" matches the firmware's Card::animatedEmojiDisableMask
 # bit layout exactly, so the mask computed here means the same thing there.
-# Sparkle/snowflake's "glyph" here is just a nicer label for the toggle row -
+# Sparkle/star's "glyph" here is just a nicer label for the toggle row -
 # the device draws both as real vector shapes, not these characters (see
-# drawSparkleGlyph()/drawSnowflakeGlyph() in DisplayUI.cpp); the corner/text
+# drawSparkleGlyph()/drawStarGlyph() in DisplayUI.cpp); the corner/text
 # picker option glyphs elsewhere (dashboard.html's EMOJI_LIST) are the ones
-# that matter for what shortcode actually gets stored.
+# that matter for what shortcode actually gets stored. "star" used to be
+# called "snowflake" - the bitmap (Adafruit's logo, not a real snowflake)
+# reads more like a star, so it was renamed.
 EMOJI_FAMILIES = [
     {"key": "heart", "label": "Heart", "glyph": "♥", "codes": [":heart:"], "bit": 0},
     {"key": "smile", "label": "Smile", "glyph": "☺", "codes": [":smile:", ":smileb:"], "bit": 1},
     {"key": "sparkle", "label": "Sparkle", "glyph": "✦", "codes": [":sparkle:"], "bit": 2},
     {"key": "diamond", "label": "Diamond", "glyph": "♦", "codes": [":diamond:"], "bit": 3},
     {"key": "notes", "label": "Notes", "glyph": "♪", "codes": [":note:", ":notes:"], "bit": 4},
-    {"key": "snowflake", "label": "Snowflake", "glyph": "❄", "codes": [":snowflake:"], "bit": 5},
+    {"key": "star", "label": "Star", "glyph": "★", "codes": [":star:"], "bit": 5},
 ]
 BORDER_FLASH_DISABLE_BIT = 6
 

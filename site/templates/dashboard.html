@@ -4,10 +4,10 @@
 {% block content %}
 
 {% set edit_card = cards[edit_index] %}
-{# Labels only - the device renders :sparkle:/:snowflake: as real shapes
+{# Labels only - the device renders :sparkle:/:star: as real shapes
    (a drawn cross, and the exact Adafruit logo bitmap), not these
    characters. See card-preview.js for what the live preview actually draws. #}
-{% set EMOJI_LIST = [(':heart:','♥'), (':smile:','☺'), (':smileb:','☻'), (':sparkle:','✦'), (':diamond:','♦'), (':note:','♪'), (':notes:','♫'), (':snowflake:','❄')] %}
+{% set EMOJI_LIST = [(':heart:','♥'), (':smile:','☺'), (':smileb:','☻'), (':sparkle:','✦'), (':diamond:','♦'), (':note:','♪'), (':notes:','♫'), (':star:','★')] %}
 
 <div class="home-grid">
 

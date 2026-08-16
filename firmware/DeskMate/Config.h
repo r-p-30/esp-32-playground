@@ -16,8 +16,8 @@
 #define OLED_I2C_ADDR  0x3C
 
 // ---- Encoder / button timing ----
-#define LONG_PRESS_MS          2000
-#define VERY_LONG_PRESS_MS     5000
+#define LONG_PRESS_MS          500
+#define VERY_LONG_PRESS_MS     2000
 #define ANIMATION_DURATION_MS  1000
 
 // ---- WiFi / NTP (Phase 1) ----

@@ -23,9 +23,9 @@ const CORNER_INSET = 3;  // px from each edge, logical 128x64 space - same on ev
 // (ctx.measureText) - actual drawing is a real vector shape
 // (drawSparkleShape() below), not this character. CP437's closest sparkle
 // option is a sun-with-rays, which reads as a sun, not a sparkle - mirrors
-// drawSparkleGlyph() in DisplayUI.cpp. Snowflake isn't in this map at all
-// for drawing purposes - it's a fixed-size bitmap (SNOWFLAKE_BMP below),
-// not a font glyph, same as drawSnowflakeGlyph() in DisplayUI.cpp.
+// drawSparkleGlyph() in DisplayUI.cpp. Star isn't in this map at all
+// for drawing purposes - it's a fixed-size bitmap (STAR_BMP below),
+// not a font glyph, same as drawStarGlyph() in DisplayUI.cpp.
 const SHORTCODE_GLYPH = {
   ':heart:': '♥',
   ':smile:': '☺',
@@ -44,11 +44,12 @@ const GLYPH_FAMILY = {
 };
 const EMOJI_CHARS = new Set(Object.values(SHORTCODE_GLYPH));
 
-// Exact same bitmap as SNOWFLAKE_BMP in DisplayUI.cpp (reused from the
-// Adafruit_SSD1306 example sketch's logo_bmp) - the actual Adafruit logo
-// shape, not a geometric snowflake, but this is the specific image asked
-// for, kept pixel-identical to what the device draws.
-const SNOWFLAKE_ROWS = [
+// Exact same bitmap as STAR_BMP in DisplayUI.cpp (reused from the
+// Adafruit_SSD1306 example sketch's logo_bmp) - it's the actual Adafruit
+// logo shape (not a hand-drawn star), kept pixel-identical to what the
+// device draws. Used to be called "snowflake"; renamed because the shape
+// reads as a star, not snow.
+const STAR_ROWS = [
   '........##......',
   '.......###......',
   '.......###......',
@@ -66,7 +67,7 @@ const SNOWFLAKE_ROWS = [
   '.###.....###....',
   '..........##....',
 ];
-const SNOWFLAKE_W = 16, SNOWFLAKE_H = 16;
+const STAR_W = 16, STAR_H = 16;
 
 function familyAnimateEnabled(family) {
   const el = document.querySelector(`input[name="animate_${family}"]`);
@@ -125,18 +126,18 @@ function charFont(ch) {
   return `${EMOJI_CHARS.has(ch) ? EMOJI_PX : NORMAL_PX}px ${FONT_STACK}`;
 }
 
-// Splits a line into regular characters and ":snowflake:" tokens - that
+// Splits a line into regular characters and ":star:" tokens - that
 // shortcode isn't in SHORTCODE_GLYPH (it's a bitmap, not a font glyph -
-// see SNOWFLAKE_ROWS below), so it survives the shortcode->glyph
+// see STAR_ROWS below), so it survives the shortcode->glyph
 // substitution in renderPreview() as a literal substring that needs its
 // own multi-character handling here.
 function tokenizeLine(line) {
   const tokens = [];
   let i = 0;
   while (i < line.length) {
-    if (line.startsWith(':snowflake:', i)) {
-      tokens.push({ snowflake: true });
-      i += ':snowflake:'.length;
+    if (line.startsWith(':star:', i)) {
+      tokens.push({ star: true });
+      i += ':star:'.length;
     } else {
       tokens.push({ ch: line[i] });
       i++;
@@ -148,8 +149,8 @@ function tokenizeLine(line) {
 function lineWidth(ctx, line) {
   let w = 0;
   for (const token of tokenizeLine(line)) {
-    if (token.snowflake) {
-      w += SNOWFLAKE_W;
+    if (token.star) {
+      w += STAR_W;
     } else {
       ctx.font = charFont(token.ch);
       w += ctx.measureText(token.ch).width;
@@ -197,13 +198,13 @@ function drawMiniHeartShape(ctx, cx, cy, r) {
   ctx.fill();
 }
 
-// Draws the exact SNOWFLAKE_ROWS bitmap, pixel for pixel, at its native
+// Draws the exact STAR_ROWS bitmap, pixel for pixel, at its native
 // 16x16 size (drawBitmap() on the device doesn't scale, so neither does
 // this) - x/y is the top-left corner, same convention as the device's
 // Adafruit_GFX cursor. No true rotation is possible for a fixed bitmap,
 // so "spin" orbits its position slightly instead (mirrors
-// drawSnowflakeGlyph() in DisplayUI.cpp).
-function drawSnowflakeShape(ctx, x, y, animating, progress) {
+// drawStarGlyph() in DisplayUI.cpp).
+function drawStarShape(ctx, x, y, animating, progress) {
   let ox = 0, oy = 0;
   if (animating) {
     const p = (progress * 3) % 1;
@@ -211,9 +212,9 @@ function drawSnowflakeShape(ctx, x, y, animating, progress) {
     ox = [0, 1, 0, -1][step];
     oy = [-1, 0, 1, 0][step];
   }
-  for (let row = 0; row < SNOWFLAKE_H; row++) {
-    for (let col = 0; col < SNOWFLAKE_W; col++) {
-      if (SNOWFLAKE_ROWS[row][col] === '#') {
+  for (let row = 0; row < STAR_H; row++) {
+    for (let col = 0; col < STAR_W; col++) {
+      if (STAR_ROWS[row][col] === '#') {
         ctx.fillRect(x + ox + col, y + oy + row, 1, 1);
       }
     }
@@ -221,7 +222,7 @@ function drawSnowflakeShape(ctx, x, y, animating, progress) {
 }
 
 // Renders one glyph's default animation, mirroring drawAnimatedGlyph() in
-// DisplayUI.cpp - heart/smile/diamond/notes only; sparkle/snowflake are
+// DisplayUI.cpp - heart/smile/diamond/notes only; sparkle/star are
 // vector shapes handled by their dedicated draw*Shape() functions above.
 // Returns true if it drew something custom (caller skips the plain draw).
 function drawAnimatedGlyph(ctx, family, x, y, fontPx, progress) {
@@ -265,9 +266,9 @@ function drawAnimatedGlyph(ctx, family, x, y, fontPx, progress) {
 
 // Dispatches one glyph's rendering: vector shape (sparkle), animated
 // glyph-swap, or a plain character - same precedence as
-// printAligned()/drawCornerEmoji() in DisplayUI.cpp. Snowflake isn't
+// printAligned()/drawCornerEmoji() in DisplayUI.cpp. Star isn't
 // handled here - it's a multi-character token, not a single glyph, see
-// tokenizeLine() and the dedicated calls to drawSnowflakeShape() below.
+// tokenizeLine() and the dedicated calls to drawStarShape() below.
 function drawGlyph(ctx, ch, x, y, fontPx, animating, progress) {
   const family = GLYPH_FAMILY[ch];
   const animateThis = animating && family && familyAnimateEnabled(family);
@@ -283,13 +284,13 @@ function drawGlyph(ctx, ch, x, y, fontPx, animating, progress) {
 function drawLine(ctx, line, x, baselineY, animating, progress) {
   let cx = x;
   for (const token of tokenizeLine(line)) {
-    if (token.snowflake) {
-      const animateThis = animating && familyAnimateEnabled('snowflake');
+    if (token.star) {
+      const animateThis = animating && familyAnimateEnabled('star');
       // Bitmap's natural anchor is top-left; baselineY is where regular
       // text sits, so nudge up to roughly center the 16px-tall bitmap
       // on the line instead of it hanging below.
-      drawSnowflakeShape(ctx, cx, baselineY - SNOWFLAKE_H + 3, animateThis, progress);
-      cx += SNOWFLAKE_W;
+      drawStarShape(ctx, cx, baselineY - STAR_H + 3, animateThis, progress);
+      cx += STAR_W;
       continue;
     }
     const ch = token.ch;
@@ -327,15 +328,15 @@ function renderPreview(animProgress) {
     const sel = document.getElementById('corner' + i);
     if (!sel || !sel.value) continue;
 
-    if (sel.value === ':snowflake:') {
+    if (sel.value === ':star:') {
       // Fixed 16x16 bitmap, not a font glyph - own symmetric-inset
       // position rather than cornerPosition()'s measureText-based one.
       const isRight = i === 1 || i === 3;
       const isBottom = i === 2 || i === 3;
-      const cx = isRight ? (128 - CORNER_INSET - SNOWFLAKE_W) : CORNER_INSET;
-      const cy = isBottom ? (64 - CORNER_INSET - SNOWFLAKE_H) : CORNER_INSET;
-      const animateThis = animating && familyAnimateEnabled('snowflake');
-      drawSnowflakeShape(ctx, cx, cy, animateThis, progress);
+      const cx = isRight ? (128 - CORNER_INSET - STAR_W) : CORNER_INSET;
+      const cy = isBottom ? (64 - CORNER_INSET - STAR_H) : CORNER_INSET;
+      const animateThis = animating && familyAnimateEnabled('star');
+      drawStarShape(ctx, cx, cy, animateThis, progress);
       continue;
     }
 

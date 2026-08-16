@@ -124,10 +124,10 @@ static void drawAnimatedGlyph(EmojiAnimFamily family, int x, int y, float progre
       break;
     }
     default:
-      // EMOJI_ANIM_SPARKLE and EMOJI_ANIM_SNOWFLAKE aren't handled here -
+      // EMOJI_ANIM_SPARKLE and EMOJI_ANIM_STAR aren't handled here -
       // CP437 doesn't have glyphs that actually read as either shape, so
       // both are drawn as real vector shapes instead (drawSparkleGlyph()/
-      // drawSnowflakeGlyph() below), called directly from printAligned()/
+      // drawStarGlyph() below), called directly from printAligned()/
       // drawCornerEmoji() rather than through this glyph-swap dispatcher.
       break;
   }
@@ -152,13 +152,14 @@ static void drawSparkleGlyph(int x, int y, uint8_t textSize, bool animating, flo
   display.drawLine(cx, cy - r, cx, cy + r, SSD1306_WHITE);
 }
 
-// Snowflake: the exact logo_bmp bitmap from the Adafruit_SSD1306 example
+// Star: the exact logo_bmp bitmap from the Adafruit_SSD1306 example
 // sketch's falling-icon demo
 // (firmware/sanity-checks/display_hello_world/display_hello_world.ino,
 // testanimate()), reused pixel-for-pixel rather than a CP437 glyph or a
-// hand-drawn vector shape - it's the actual Adafruit logo silhouette, not
-// a geometric snowflake, but it's the specific bitmap that was asked for.
-static const unsigned char PROGMEM SNOWFLAKE_BMP[] = {
+// hand-drawn vector shape - it's the actual Adafruit logo silhouette. It
+// used to be called "snowflake", but that read as a blob, not snow - the
+// shape reads much more like a star, so the whole family was renamed.
+static const unsigned char PROGMEM STAR_BMP[] = {
   0b00000000, 0b11000000,
   0b00000001, 0b11000000,
   0b00000001, 0b11000000,
@@ -176,14 +177,14 @@ static const unsigned char PROGMEM SNOWFLAKE_BMP[] = {
   0b01110000, 0b01110000,
   0b00000000, 0b00110000
 };
-#define SNOWFLAKE_BMP_W 16
-#define SNOWFLAKE_BMP_H 16
+#define STAR_BMP_W 16
+#define STAR_BMP_H 16
 
 // No true rotation is possible for a fixed bitmap (Adafruit_GFX doesn't
 // support rotating drawBitmap()), so "spin" orbits its position slightly
 // instead - same trick as the retired glyph-based version, still reads
 // as "in motion" rather than static.
-static void drawSnowflakeGlyph(int x, int y, uint8_t textSize, bool animating, float progress) {
+static void drawStarGlyph(int x, int y, uint8_t textSize, bool animating, float progress) {
   int ox = 0, oy = 0;
   if (animating) {
     float p = fmodf(progress * 3.0f, 1.0f);
@@ -193,7 +194,7 @@ static void drawSnowflakeGlyph(int x, int y, uint8_t textSize, bool animating, f
     ox = dx[step] * (int)textSize;
     oy = dy[step] * (int)textSize;
   }
-  display.drawBitmap(x + ox, y + oy, SNOWFLAKE_BMP, SNOWFLAKE_BMP_W, SNOWFLAKE_BMP_H, SSD1306_WHITE);
+  display.drawBitmap(x + ox, y + oy, STAR_BMP, STAR_BMP_W, STAR_BMP_H, SSD1306_WHITE);
 }
 
 // Generalized version of printCentered with per-axis alignment, used only
@@ -260,11 +261,11 @@ static void printAligned(const char* text, TextAlignH alignH, TextAlignV alignV,
       if (family == EMOJI_ANIM_SPARKLE) {
         drawSparkleGlyph(cx, y, 1, animateThis, progress);
         cx += 6;
-      } else if (family == EMOJI_ANIM_SNOWFLAKE) {
+      } else if (family == EMOJI_ANIM_STAR) {
         // 16px-wide bitmap, not a 6px text-cell glyph - needs a wider
         // advance so the next character doesn't land on top of it.
-        drawSnowflakeGlyph(cx, y, 1, animateThis, progress);
-        cx += SNOWFLAKE_BMP_W;
+        drawStarGlyph(cx, y, 1, animateThis, progress);
+        cx += STAR_BMP_W;
       } else if (animateThis) {
         drawAnimatedGlyph(family, cx, y, progress, 1);
         cx += 6;
@@ -291,11 +292,11 @@ static void drawCornerEmoji(const char cornerEmoji[4], bool animating, float pro
   // so the right/bottom corners subtract cell size + inset from the edge.
   static const int cx[4] = { 3, OLED_WIDTH - 13, 3, OLED_WIDTH - 13 };
   static const int cy[4] = { 3, 3, OLED_HEIGHT - 17, OLED_HEIGHT - 17 };
-  // Snowflake is a 16x16 bitmap, bigger than the other corner glyphs'
-  // 10x14 cell - same symmetric 3px inset, but sized for its own bounds
-  // so it doesn't run past the right/bottom edge.
-  static const int snowCx[4] = { 3, OLED_WIDTH - 19, 3, OLED_WIDTH - 19 };
-  static const int snowCy[4] = { 3, 3, OLED_HEIGHT - 19, OLED_HEIGHT - 19 };
+  // Star is a 16x16 bitmap, bigger than the other corner glyphs' 10x14
+  // cell - same symmetric 3px inset, but sized for its own bounds so it
+  // doesn't run past the right/bottom edge.
+  static const int starCx[4] = { 3, OLED_WIDTH - 19, 3, OLED_WIDTH - 19 };
+  static const int starCy[4] = { 3, 3, OLED_HEIGHT - 19, OLED_HEIGHT - 19 };
   for (int i = 0; i < 4; i++) {
     if (cornerEmoji[i] == 0) continue;
     EmojiAnimFamily family = glyphToEmojiAnimFamily(cornerEmoji[i]);
@@ -303,8 +304,8 @@ static void drawCornerEmoji(const char cornerEmoji[4], bool animating, float pro
                         !(animDisableMask & (1 << family));
     if (family == EMOJI_ANIM_SPARKLE) {
       drawSparkleGlyph(cx[i], cy[i], 2, animateThis, progress);
-    } else if (family == EMOJI_ANIM_SNOWFLAKE) {
-      drawSnowflakeGlyph(snowCx[i], snowCy[i], 2, animateThis, progress);
+    } else if (family == EMOJI_ANIM_STAR) {
+      drawStarGlyph(starCx[i], starCy[i], 2, animateThis, progress);
     } else if (animateThis) {
       drawAnimatedGlyph(family, cx[i], cy[i], progress, 2);
     } else {
@@ -1065,8 +1066,8 @@ static void drawSnowfall(const Card& card, bool animating, float progress) {
 
   if (!initialized) {
     for (int f = 0; f < SNOWFALL_COUNT; f++) {
-      flakeX[f] = random(1 - SNOWFLAKE_BMP_W, OLED_WIDTH);
-      flakeY[f] = -SNOWFLAKE_BMP_H;
+      flakeX[f] = random(1 - STAR_BMP_W, OLED_WIDTH);
+      flakeY[f] = -STAR_BMP_H;
       flakeDY[f] = random(1, 4);
     }
     initialized = true;
@@ -1075,14 +1076,14 @@ static void drawSnowfall(const Card& card, bool animating, float progress) {
   printCentered(card.text, 2, 14, 9);
 
   for (int f = 0; f < SNOWFALL_COUNT; f++) {
-    display.drawBitmap(flakeX[f], flakeY[f], SNOWFLAKE_BMP, SNOWFLAKE_BMP_W, SNOWFLAKE_BMP_H, SSD1306_WHITE);
+    display.drawBitmap(flakeX[f], flakeY[f], STAR_BMP, STAR_BMP_W, STAR_BMP_H, SSD1306_WHITE);
   }
 
   for (int f = 0; f < SNOWFALL_COUNT; f++) {
     flakeY[f] += flakeDY[f];
     if (flakeY[f] >= OLED_HEIGHT) {
-      flakeX[f] = random(1 - SNOWFLAKE_BMP_W, OLED_WIDTH);
-      flakeY[f] = -SNOWFLAKE_BMP_H;
+      flakeX[f] = random(1 - STAR_BMP_W, OLED_WIDTH);
+      flakeY[f] = -STAR_BMP_H;
       flakeDY[f] = random(1, 4);
     }
   }

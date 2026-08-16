@@ -98,10 +98,11 @@ static const struct { const char* code; char glyph; } EMOJI_SHORTCODES[] = {
   { ":diamond:", (char)0x04 },
   { ":note:", (char)0x0D },
   { ":notes:", (char)0x0E },
-  // No true snowflake glyph exists in CP437 (this font's only symbol
-  // set) - 0x07 (a filled circle/bullet) is the closest safe stand-in
-  // that a normal typed message would never produce by accident.
-  { ":snowflake:", (char)0x07 },
+  // No glyph shaped like the star bitmap exists in CP437 (this font's
+  // only symbol set) - 0x07 (a filled circle/bullet) is just a safe
+  // stand-in byte that a normal typed message would never produce by
+  // accident; the actual rendering is the star bitmap, not this glyph.
+  { ":star:", (char)0x07 },
 };
 static const int NUM_EMOJI_SHORTCODES = sizeof(EMOJI_SHORTCODES) / sizeof(EMOJI_SHORTCODES[0]);
 
@@ -128,7 +129,7 @@ EmojiAnimFamily glyphToEmojiAnimFamily(char glyph) {
     case 0x0F: return EMOJI_ANIM_SPARKLE;
     case 0x04: return EMOJI_ANIM_DIAMOND;
     case 0x0D: case 0x0E: return EMOJI_ANIM_NOTES;
-    case 0x07: return EMOJI_ANIM_SNOWFLAKE;
+    case 0x07: return EMOJI_ANIM_STAR;
     default: return EMOJI_ANIM_NONE;
   }
 }

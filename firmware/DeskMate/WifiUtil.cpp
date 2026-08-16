@@ -6,9 +6,8 @@
 #include "InputEncoder.h"
 #include "Config.h"
 
-// Fires when WiFiManager gives up on known credentials and opens the
-// setup portal - lets the OLED explain what's happening instead of
-// sitting frozen while wm.autoConnect() blocks.
+// Fires when the setup portal AP starts broadcasting - lets the OLED
+// explain what's happening instead of sitting frozen/blank.
 static void onSetupPortalStart(WiFiManager* wm) {
   showWifiSetupPrompt(WIFI_SETUP_AP_NAME);
 }
@@ -27,12 +26,27 @@ bool connectWiFiAtBootWithSetupFallback(unsigned long normalTimeoutMs) {
   // flow's real-world flakiness (AP+STA dual-mode reliability, phones
   // handling a no-internet AP poorly, etc.).
   if (strlen(WIFI_SSID) > 0) {
+    Serial.println("WiFi: trying hardcoded credentials...");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     unsigned long hcStart = millis();
     while (WiFi.status() != WL_CONNECTED && (millis() - hcStart) < normalTimeoutMs) {
+      // Poll for long-press here too, not just in the portal loop below -
+      // without this, a long-press during this stretch (and the NVS
+      // attempt after it) is silently dropped, and "skip" only starts
+      // working once the portal is already up, many seconds later.
+      if (pollEncoder() == ENC_LONG_PRESS) {
+        Serial.println("WiFi: skipped via long-press (during hardcoded attempt).");
+        WiFi.disconnect(true);
+        delay(200);
+        return false;
+      }
       delay(100);
     }
-    if (WiFi.status() == WL_CONNECTED) return true;
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("WiFi: connected via hardcoded credentials.");
+      return true;
+    }
+    Serial.println("WiFi: hardcoded credentials failed.");
 
     // Cleanly stop before trying anything else - without this, the STA
     // driver is still "connecting" from the WiFi.begin() above, and the
@@ -48,13 +62,24 @@ bool connectWiFiAtBootWithSetupFallback(unsigned long normalTimeoutMs) {
   // credentials at all. On a genuinely first-ever boot with empty NVS
   // this just fails immediately and falls through to the setup portal
   // below, which is the intended path for a never-configured device.
+  Serial.println("WiFi: trying stored (NVS) credentials...");
   WiFi.begin();
 
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - start) < normalTimeoutMs) {
+    if (pollEncoder() == ENC_LONG_PRESS) {
+      Serial.println("WiFi: skipped via long-press (during stored-credentials attempt).");
+      WiFi.disconnect(true);
+      delay(200);
+      return false;
+    }
     delay(100);
   }
-  if (WiFi.status() == WL_CONNECTED) return true;
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi: connected via stored credentials.");
+    return true;
+  }
+  Serial.println("WiFi: stored credentials failed - opening setup portal.");
 
   WiFi.disconnect(true);
   delay(200);
@@ -73,21 +98,33 @@ bool connectWiFiAtBootWithSetupFallback(unsigned long normalTimeoutMs) {
   wm.setConnectTimeout(45);
   wm.setAPCallback(onSetupPortalStart);
 
-  // Non-blocking mode: autoConnect() kicks the portal off and returns
-  // right away instead of blocking here until it connects/fails/times
-  // out. That's what lets the loop below poll the encoder for a
-  // long-press to bail out early - with the library's own blocking
-  // autoConnect(), there'd be no way to skip the wait short of power
-  //-cycling the device.
+  // startConfigPortal() (not autoConnect()) - we've already tried the
+  // stored NVS credentials ourselves just above, so autoConnect()'s own
+  // internal "try saved AP first" step would just repeat that same
+  // attempt, blocking for another wm.setConnectTimeout(45) seconds (and
+  // not pollable - it happens inside the library call, before the loop
+  // below ever runs) before finally opening the portal. startConfigPortal()
+  // skips straight to broadcasting the AP.
+  //
+  // Non-blocking mode: kicks the portal off and returns right away
+  // instead of blocking here until it connects/fails/times out. That's
+  // what lets the loop below poll the encoder for a long-press to bail
+  // out early - with the library's own blocking call, there'd be no way
+  // to skip the wait short of power-cycling the device.
   wm.setConfigPortalBlocking(false);
-  wm.autoConnect(WIFI_SETUP_AP_NAME, WIFI_SETUP_AP_PASSWORD);
+  wm.startConfigPortal(WIFI_SETUP_AP_NAME, WIFI_SETUP_AP_PASSWORD);
+  Serial.println("WiFi: setup portal AP is up.");
 
   unsigned long portalStart = millis();
   unsigned long portalTimeoutMs = (unsigned long)WIFI_SETUP_PORTAL_TIMEOUT_SEC * 1000UL;
   while (true) {
     wm.process();  // services the captive portal's web server/DNS - must be called regularly
-    if (WiFi.status() == WL_CONNECTED) return true;
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("WiFi: connected via setup portal.");
+      return true;
+    }
     if ((millis() - portalStart) >= portalTimeoutMs) {
+      Serial.println("WiFi: setup portal timed out - continuing offline.");
       // wm.stopConfigPortal() (also called on the long-press-skip path
       // below) can leave the STA driver stuck mid-"connecting" instead of
       // cleanly idle - without resetting it here, every later
@@ -99,6 +136,7 @@ bool connectWiFiAtBootWithSetupFallback(unsigned long normalTimeoutMs) {
       return false;
     }
     if (pollEncoder() == ENC_LONG_PRESS) {
+      Serial.println("WiFi: skipped via long-press (during setup portal) - continuing offline.");
       wm.stopConfigPortal();
       WiFi.disconnect(true);
       delay(200);
