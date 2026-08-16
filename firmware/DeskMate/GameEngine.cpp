@@ -26,8 +26,8 @@
 // purpose - a rotary-encoder button needs more setup time per jump than a
 // mouse click would, so a tight rhythm here reads as unfair rather than
 // challenging.
-#define SPAWN_GAP_MIN_PX  110
-#define SPAWN_GAP_MAX_PX  190
+#define SPAWN_GAP_MIN_PX  60
+#define SPAWN_GAP_MAX_PX  110
 
 static GameRunState runState = GAME_COUNTDOWN;
 static unsigned long countdownStartMs = 0;

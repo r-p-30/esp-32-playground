@@ -1241,8 +1241,11 @@ void updateDisplayAnimation() {
 
 // Ground/dino anchor - GAME_DINO_X must match GameEngine.cpp's
 // DINO_BASE_X so the drawn sprite lines up with the hitbox it's computing
-// collisions against.
-static const int GAME_GROUND_Y = 56;
+// collisions against. GAME_GROUND_Y sits 2px off the bottom edge (was 56,
+// leaving 8px dead space) - safe to push down now that the game screen no
+// longer draws a permanent frame/border down there (see
+// drawGameOverScreen()/drawGamePlayScene()'s "No permanent frame" notes).
+static const int GAME_GROUND_Y = 62;
 static const int GAME_DINO_X = 26;
 
 // Deliberately much smaller than the ANIM_DINO_RUN card preview's dino
