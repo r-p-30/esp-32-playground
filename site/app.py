@@ -136,6 +136,14 @@ def device_ws(ws):
                 state.import_cards_from_device(payload["cardsReport"])
             else:
                 state.save_heartbeat(payload)
+                # Keeps the dashboard's Night/Game mode toggles honest when
+                # the physical button (not the site) is what changed them -
+                # see sync_modes_from_heartbeat()'s docstring. Both fields
+                # are always present in the device's heartbeat payload (see
+                # sendHeartbeatIfDue() in RemoteControl.cpp), so a plain
+                # bool() is enough - no missing-key case to guard against.
+                if "nightMode" in payload and "gameMode" in payload:
+                    state.sync_modes_from_heartbeat(bool(payload["nightMode"]), bool(payload["gameMode"]))
     finally:
         with _device_ws_lock:
             if _device_ws is ws:

@@ -263,6 +263,14 @@ void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode) {
   sendHeartbeatIfDue(currentCard, nightModeActive, inGameMode);
 }
 
+void forceHeartbeatNow() {
+  // 0 is sendHeartbeatIfDue()'s own "never sent yet" sentinel, which skips
+  // the interval check entirely - reusing it here is what makes the next
+  // loopRemoteControl() call send right away instead of waiting out
+  // REMOTE_HEARTBEAT_INTERVAL_MS.
+  lastHeartbeatSentMs = 0;
+}
+
 int consumeRemoteCardJump() {
   int jump = pendingCardJump;
   pendingCardJump = -1;

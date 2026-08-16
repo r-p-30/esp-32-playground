@@ -155,6 +155,27 @@ def set_card_layout(index, align_h, align_v, corner_emoji):
     save_cards(cards)
 
 
+def sync_modes_from_heartbeat(night_mode, game_mode):
+    """Keeps nightModeEnabled/gameModeEnabled in sync with what the device
+    actually reports on every heartbeat - night mode and game mode can
+    both be triggered by the physical button, not just the site's toggle,
+    so without this the dashboard checkbox would only reflect the truth
+    when the site was the one that changed it (see docs/remote-api-spec.md
+    "device -> site" heartbeat fields). Deliberately NOT apply_update():
+    that clears every one-shot field (buzz, showCard, etc.) and bumps
+    revision on every call, which would risk clobbering an action the
+    dashboard just sent that the device hasn't processed yet, given a
+    heartbeat can land in between. This only ever touches these two
+    continuous fields."""
+    st = load_state()
+    changed = st.get("nightModeEnabled") != night_mode or st.get("gameModeEnabled") != game_mode
+    if not changed:
+        return
+    st["nightModeEnabled"] = night_mode
+    st["gameModeEnabled"] = game_mode
+    save_state(st)
+
+
 def load_heartbeat():
     return _read_json(HEARTBEAT_PATH, None)
 

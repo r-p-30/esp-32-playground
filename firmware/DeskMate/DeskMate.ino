@@ -43,13 +43,31 @@ static void showCurrentMode() {
 // Funnels every way into game mode (local long-press, remote toggle-on)
 // through one place, same reasoning as changeToCard() - keeps the fresh
 // Ready/Set/Go countdown and the game-over sound tracker consistent
-// regardless of what triggered entry.
+// regardless of what triggered entry. forceHeartbeatNow() here (and in
+// every other mode-change path below) is what keeps the site's stored
+// toggle state in sync when the *button* is what changed it - without
+// this, the site only finds out on its next periodic heartbeat (up to
+// REMOTE_HEARTBEAT_INTERVAL_MS later), and the "Game mode"/"Night mode"
+// checkboxes would silently disagree with the device until then. Harmless
+// to also call it when the change came from the site itself - the site
+// already knows in that case, so it's just a redundant, cheap heartbeat.
 static void enterGameMode() {
   mode = MODE_GAME;
   initGame();
   gameOverSoundPlayed = false;
   playChime();
   showCurrentMode();
+  forceHeartbeatNow();
+}
+
+// Shared by both ways out of game mode back to cards (local long/very-long
+// press, and the site turning its Game mode toggle off) - see
+// enterGameMode()'s comment for why forceHeartbeatNow() matters here too.
+static void exitGameModeToCards() {
+  mode = MODE_CARDS;
+  playChime();
+  showCurrentMode();
+  forceHeartbeatNow();
 }
 
 static void setNightMode(bool active) {
@@ -70,6 +88,7 @@ static void setNightMode(bool active) {
     showCurrentMode();
     playChime();
   }
+  forceHeartbeatNow();  // see enterGameMode()'s comment
 }
 
 void setup() {
@@ -120,9 +139,7 @@ void loop() {
         playGameJump();
       }
     } else if (ev == ENC_LONG_PRESS || ev == ENC_VERY_LONG_PRESS) {
-      mode = MODE_CARDS;
-      playChime();
-      showCurrentMode();
+      exitGameModeToCards();
     }
   } else {
     switch (ev) {
@@ -181,9 +198,7 @@ void loop() {
     if (gameChange == 1) {
       enterGameMode();
     } else {
-      mode = MODE_CARDS;
-      playChime();
-      showCurrentMode();
+      exitGameModeToCards();
     }
   }
 

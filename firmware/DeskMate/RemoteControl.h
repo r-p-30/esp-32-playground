@@ -47,6 +47,14 @@ bool consumeRemoteAnimationTrigger();
 // without touching any card content.
 bool consumeIdentifyPing();
 
+// Forces the next loopRemoteControl() call to send a heartbeat
+// immediately, bypassing REMOTE_HEARTBEAT_INTERVAL_MS - call this right
+// after night mode or game mode changes locally (button press), so the
+// site's stored toggle state catches up within one loop iteration instead
+// of waiting up to REMOTE_HEARTBEAT_INTERVAL_MS for the next periodic
+// heartbeat. Harmless no-op if the WebSocket isn't connected.
+void forceHeartbeatNow();
+
 // Carousel state - reflects the *current* value from the last pushed
 // update (not revision-gated like the actions above, since this is an
 // ongoing setting rather than a one-time event).
