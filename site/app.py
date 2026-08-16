@@ -40,18 +40,21 @@ EMOJI_FAMILIES = [
 BORDER_FLASH_DISABLE_BIT = 6
 
 
-def used_emoji_families(card):
-    """Families with at least one shortcode present in this card's text or
-    corner slots - only these get an animate toggle in the UI (see
-    dashboard.html), since a toggle for an emoji that isn't even on the
-    card wouldn't do anything on the device either."""
+def all_emoji_families(card):
+    """Every family, annotated with whether it's currently present in this
+    card's text or corner slots. Every family always gets a toggle row in
+    the DOM (dashboard.html) - JS (card-preview.js's
+    updateEmojiToggleVisibility()) shows/hides each row live as the text
+    box or corner pickers change, so a toggle appears the instant its
+    emoji is added, not only after a save/reload. "used" here is just the
+    server-rendered initial state for that same visibility."""
     haystack = (card.get("text") or "") + " " + " ".join(card.get("cornerEmoji") or [])
     disable_mask = card.get("animatedEmojiDisableMask", 0)
-    used = []
+    result = []
     for fam in EMOJI_FAMILIES:
-        if any(code in haystack for code in fam["codes"]):
-            used.append({**fam, "checked": not (disable_mask & (1 << fam["bit"]))})
-    return used
+        used = any(code in haystack for code in fam["codes"])
+        result.append({**fam, "used": used, "checked": not (disable_mask & (1 << fam["bit"]))})
+    return result
 
 
 # ---- Device-facing API (docs/remote-api-spec.md) ----
@@ -196,7 +199,7 @@ def dashboard():
         device_connected=_device_ws is not None,
         cards=all_cards,
         edit_index=edit_index,
-        used_emoji_families=used_emoji_families(all_cards[edit_index]),
+        emoji_families=all_emoji_families(all_cards[edit_index]),
         border_flash_checked=not (all_cards[edit_index].get("animatedEmojiDisableMask", 0) & (1 << BORDER_FLASH_DISABLE_BIT)),
     )
 
@@ -282,13 +285,13 @@ def card_save(index):
     duration_ms = int(request.form.get("durationMs") or 1000)
     make_active = request.form.get("makeActive") == "on"
 
-    # Animate toggles only exist in the form for families that were used
-    # (and thus shown) as of the page load this submission came from - a
-    # family the user just added to the text in this same edit won't have
-    # a toggle yet (starts enabled by default; shows up next save).
+    # Every family's checkbox is always present in the submitted form (see
+    # dashboard.html/card-preview.js - hidden rows are CSS display:none,
+    # which browsers still submit), so this reads all of them regardless
+    # of which were visible/used at the time.
     old_card = state.load_cards()[index]
     disable_mask = old_card.get("animatedEmojiDisableMask", 0)
-    for fam in used_emoji_families(old_card):
+    for fam in EMOJI_FAMILIES:
         field = f"animate_{fam['key']}"
         if request.form.get(field) == "on":
             disable_mask &= ~(1 << fam["bit"])

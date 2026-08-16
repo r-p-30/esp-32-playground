@@ -57,6 +57,16 @@ static void printCentered(const char* text, int yTop, int yBottom, int lineHeigh
   }
 }
 
+// Small vector heart used both by the dedicated "i miss you" card
+// (drawHeart() below) and by the animated heart glyph (drawAnimatedGlyph()
+// right below) - moved up here so both can share it. Two filled circles
+// for the lobes, one triangle for the point.
+static void drawMiniHeart(int cx, int cy, int r) {
+  display.fillCircle(cx - r / 2, cy - r / 3, r / 2, SSD1306_WHITE);
+  display.fillCircle(cx + r / 2, cy - r / 3, r / 2, SSD1306_WHITE);
+  display.fillTriangle(cx - r, cy - r / 4, cx + r, cy - r / 4, cx, cy + r, SSD1306_WHITE);
+}
+
 // Renders one emoji glyph's default animation in place of a plain print()
 // - only called for glyphs whose family is animate-enabled on this card
 // (see Card::animatedEmojiDisableMask) while a press-animation is running.
@@ -71,14 +81,16 @@ static void drawAnimatedGlyph(EmojiAnimFamily family, int x, int y, float progre
   display.setTextSize(textSize);
   switch (family) {
     case EMOJI_ANIM_HEART: {
-      // Two quick beats then a pause, like an actual heartbeat, rather
-      // than a steady blink.
-      float p = fmodf(progress * 3.0f, 1.0f);
-      bool visible = (p < 0.15f) || (p > 0.25f && p < 0.4f);
-      if (visible) {
-        display.setCursor(x, y);
-        display.print((char)0x03);
-      }
+      // Real heartbeat (size pulse), same as the dedicated "i miss you"
+      // card's drawHeart() - reuses its drawMiniHeart() vector shape
+      // instead of an on/off blink of the CP437 heart glyph, which read
+      // as blinking, not beating.
+      int cx = x + 3 * textSize;
+      int cy = y + 3 * textSize;
+      float wave = fabsf(sinf(progress * PI * 3.0f));
+      int r = (int)(2 * textSize * (1.0f + wave * 0.6f));
+      if (r < 1) r = 1;
+      drawMiniHeart(cx, cy, r);
       break;
     }
     case EMOJI_ANIM_SMILE: {
@@ -90,15 +102,15 @@ static void drawAnimatedGlyph(EmojiAnimFamily family, int x, int y, float progre
       break;
     }
     case EMOJI_ANIM_DIAMOND: {
+      // Brief size-flash instead of stray corner pixels - those read as
+      // random dots, especially when diamond is placed as a corner
+      // decoration itself (stray dots right next to the real screen
+      // corner looked like a rendering glitch rather than an animation).
+      float p = fmodf(progress * 4.0f, 1.0f);
+      uint8_t flashSize = (p < 0.2f) ? (uint8_t)(textSize + 1) : textSize;
+      display.setTextSize(flashSize);
       display.setCursor(x, y);
       display.print((char)0x04);
-      float p = fmodf(progress * 4.0f, 1.0f);
-      if (p < 0.2f) {
-        display.drawPixel(x - 2 * textSize, y - 2 * textSize, SSD1306_WHITE);
-        display.drawPixel(x + 7 * textSize, y - 2 * textSize, SSD1306_WHITE);
-        display.drawPixel(x - 2 * textSize, y + 6 * textSize, SSD1306_WHITE);
-        display.drawPixel(x + 7 * textSize, y + 6 * textSize, SSD1306_WHITE);
-      }
       break;
     }
     case EMOJI_ANIM_NOTES: {
@@ -140,14 +152,12 @@ static void drawSparkleGlyph(int x, int y, uint8_t textSize, bool animating, flo
   display.drawLine(cx, cy - r, cx, cy + r, SSD1306_WHITE);
 }
 
-// Snowflake: a real 6-armed asterisk (3 lines through the center, 60°
-// apart) instead of a glyph - CP437 has no snowflake, and this shape
-// gets genuine rotation for the "spin" animation, which no fixed glyph
-// swap could do.
-// Reused as-is from the Adafruit_SSD1306 example sketch's falling-icon
-// demo (firmware/sanity-checks/display_hello_world/display_hello_world.ino,
-// logo_bmp/testanimate()) - the actual Adafruit logo shape, not a
-// geometric snowflake, but this is the specific bitmap asked for.
+// Snowflake: the exact logo_bmp bitmap from the Adafruit_SSD1306 example
+// sketch's falling-icon demo
+// (firmware/sanity-checks/display_hello_world/display_hello_world.ino,
+// testanimate()), reused pixel-for-pixel rather than a CP437 glyph or a
+// hand-drawn vector shape - it's the actual Adafruit logo silhouette, not
+// a geometric snowflake, but it's the specific bitmap that was asked for.
 static const unsigned char PROGMEM SNOWFLAKE_BMP[] = {
   0b00000000, 0b11000000,
   0b00000001, 0b11000000,
@@ -601,12 +611,6 @@ static void drawTerminalTypeBugs(const Card& card, bool animating, float progres
 
 static void drawTerminalTypeFirewall(const Card& card, bool animating, float progress) {
   drawTerminalTypeReveal(card, animating, progress, "my_heart");
-}
-
-static void drawMiniHeart(int cx, int cy, int r) {
-  display.fillCircle(cx - r / 2, cy - r / 3, r / 2, SSD1306_WHITE);
-  display.fillCircle(cx + r / 2, cy - r / 3, r / 2, SSD1306_WHITE);
-  display.fillTriangle(cx - r, cy - r / 4, cx + r, cy - r / 4, cx, cy + r, SSD1306_WHITE);
 }
 
 static void drawHeart(const Card& card, bool animating, float progress) {

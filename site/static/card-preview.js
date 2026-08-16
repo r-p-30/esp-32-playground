@@ -81,6 +81,29 @@ function borderFlashEnabled() {
   return el ? el.checked : true;
 }
 
+// Shows/hides each family's animate-toggle row (server-rendered, see
+// dashboard.html's emoji_families loop) based on whether that family's
+// shortcode is currently in the text box or any corner picker - live, so
+// adding an emoji mid-edit surfaces its toggle immediately instead of only
+// after a save/reload.
+function updateEmojiToggleVisibility() {
+  const textEl = document.getElementById('text');
+  let haystack = textEl ? textEl.value : '';
+  for (let i = 0; i < 4; i++) {
+    const sel = document.getElementById('corner' + i);
+    if (sel && sel.value) haystack += ' ' + sel.value;
+  }
+  let anyUsed = false;
+  document.querySelectorAll('.emoji-toggle-row').forEach((row) => {
+    const codes = (row.dataset.codes || '').split(',').filter(Boolean);
+    const used = codes.some((c) => haystack.includes(c));
+    row.classList.toggle('hidden', !used);
+    if (used) anyUsed = true;
+  });
+  const section = document.getElementById('emoji-animations-section');
+  if (section) section.classList.toggle('hidden', !anyUsed);
+}
+
 // Symmetric inset from every edge, converting the canvas's baseline-relative
 // y-coordinate into the same "top-left of the glyph" positioning the
 // device's Adafruit_GFX cursor uses - without this, a numerically-equal
@@ -154,6 +177,26 @@ function drawSparkleShape(ctx, x, y, fontPx, animating, progress) {
   ctx.stroke();
 }
 
+// Real heartbeat (size pulse), matching drawMiniHeart()/drawHeart() in
+// DisplayUI.cpp (the "i miss you" card's dedicated animation) - not an
+// on/off blink. Two filled circles for the lobes + a triangle for the
+// point, same silhouette as the firmware's vector shape.
+function drawMiniHeartShape(ctx, cx, cy, r) {
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(cx - r / 2, cy - r / 3, r / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx + r / 2, cy - r / 3, r / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - r, cy - r / 4);
+  ctx.lineTo(cx + r, cy - r / 4);
+  ctx.lineTo(cx, cy + r);
+  ctx.closePath();
+  ctx.fill();
+}
+
 // Draws the exact SNOWFLAKE_ROWS bitmap, pixel for pixel, at its native
 // 16x16 size (drawBitmap() on the device doesn't scale, so neither does
 // this) - x/y is the top-left corner, same convention as the device's
@@ -187,9 +230,9 @@ function drawAnimatedGlyph(ctx, family, x, y, fontPx, progress) {
 
   switch (family) {
     case 'heart': {
-      const p = cycle(3);
-      const visible = p < 0.15 || (p > 0.25 && p < 0.4);
-      if (visible) ctx.fillText('♥', x, y);
+      const wave = Math.abs(Math.sin(progress * Math.PI * 3));
+      const r = fontPx * 0.2 * (1 + wave * 0.5);
+      drawMiniHeartShape(ctx, x + fontPx * 0.3, y - fontPx * 0.28, r);
       return true;
     }
     case 'smile': {
@@ -198,15 +241,14 @@ function drawAnimatedGlyph(ctx, family, x, y, fontPx, progress) {
       return true;
     }
     case 'diamond': {
-      ctx.fillText('♦', x, y);
+      // Brief size-flash instead of stray corner pixels - those read as
+      // random dots, especially when diamond is used as a corner
+      // decoration itself (stray dots right next to the real screen
+      // corner looked like a rendering glitch).
       const p = cycle(4);
-      if (p < 0.2) {
-        const o = fontPx * 0.5;
-        ctx.fillRect(x - o, y - o, 1, 1);
-        ctx.fillRect(x + fontPx + o, y - o, 1, 1);
-        ctx.fillRect(x - o, y + o, 1, 1);
-        ctx.fillRect(x + fontPx + o, y + o, 1, 1);
-      }
+      const scale = p < 0.15 ? 1.3 : 1.0;
+      ctx.font = `${fontPx * scale}px ${FONT_STACK}`;
+      ctx.fillText('♦', x, y);
       return true;
     }
     case 'notes': {
@@ -263,6 +305,7 @@ function drawLine(ctx, line, x, baselineY, animating, progress) {
 // animProgress: omit for the static view, or 0-1 to also animate emoji
 // and draw the border-flash ring (see previewAnimation() below).
 function renderPreview(animProgress) {
+  updateEmojiToggleVisibility();
   const canvas = document.getElementById('preview-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');

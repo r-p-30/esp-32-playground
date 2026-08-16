@@ -331,6 +331,10 @@ select {
   margin-top: 0.6rem;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .save-row {
   display: flex;
   align-items: center;
