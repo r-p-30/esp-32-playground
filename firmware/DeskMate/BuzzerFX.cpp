@@ -39,3 +39,22 @@ void playIdentifyPing() {
   delay(90);
   noTone(PIN_BUZZER);
 }
+
+void playGameJump() {
+  // tone() with a duration is non-blocking (returns immediately) - safe to
+  // call from inside the game's per-frame input handling without stalling
+  // the loop.
+  tone(PIN_BUZZER, 1800, 60);
+}
+
+void playGameOver() {
+  // Three descending notes - only fires once per collision, so a short
+  // blocking delay here is fine (same reasoning as playIncomingMessage()).
+  tone(PIN_BUZZER, 700, 120);
+  delay(130);
+  tone(PIN_BUZZER, 500, 120);
+  delay(130);
+  tone(PIN_BUZZER, 300, 200);
+  delay(210);
+  noTone(PIN_BUZZER);
+}

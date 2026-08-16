@@ -16,3 +16,11 @@ void playIncomingMessage();
 // Two quick identical beeps for the remote "identify" ping - confirms an
 // update reached the device without touching card content.
 void playIdentifyPing();
+
+// Quick blip on a successful jump - deliberately tiny/non-blocking since
+// it fires from inside the game's input handling, not a rare one-off.
+void playGameJump();
+
+// Low descending "fail" tone on cactus collision - distinct from every
+// other sound so game over reads unambiguously.
+void playGameOver();

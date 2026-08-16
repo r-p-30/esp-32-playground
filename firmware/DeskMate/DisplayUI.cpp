@@ -9,6 +9,7 @@
 #include "DisplayUI.h"
 #include "Cards.h"
 #include "Config.h"
+#include "GameEngine.h"
 
 // NOTE: if the 1.3" OLED turns out to use a different controller chip than
 // SSD1306 once it arrives, swap this library for U8g2 - see plan section 8.
@@ -1238,13 +1239,117 @@ void updateDisplayAnimation() {
   }
 }
 
-void showGamePlaceholder() {
+// Ground/dino anchor - GAME_DINO_X must match GameEngine.cpp's
+// DINO_BASE_X so the drawn sprite lines up with the hitbox it's computing
+// collisions against.
+static const int GAME_GROUND_Y = 56;
+static const int GAME_DINO_X = 26;
+
+// Deliberately much smaller than the ANIM_DINO_RUN card preview's dino
+// (that one is untouched - card size stays the same) - just a few pixels
+// taller than the smallest cactus (14px, see GameEngine.cpp's
+// CACTUS_SMALL_H) rather than a big sprite. Shrinking it is what makes a
+// genuinely high/big jump arc possible at all on a 64px-tall screen -
+// with the old full-size sprite, a taller arc pushed the head off the top
+// of the display. legTop shifts up by heightPx while airborne, giving the
+// jump its vertical motion. grounded selects the alternating run-cycle
+// legs; mid-air always draws the same tucked pose (no cycling while
+// airborne).
+static void drawGameDino(int dinoX, int heightPx, bool grounded, bool legFrameA) {
+  int legTop = GAME_GROUND_Y - 3 - heightPx;
+  int bodyTop = legTop - 8;
+  int headTop = bodyTop - 7;
+
+  display.fillRect(dinoX - 4, bodyTop, 9, 8, SSD1306_WHITE);
+  display.fillRect(dinoX + 1, headTop, 6, 7, SSD1306_WHITE);
+  display.fillCircle(dinoX + 6, headTop + 2, 1, SSD1306_BLACK);
+  display.fillTriangle(dinoX - 4, bodyTop + 1, dinoX - 9, bodyTop + 4, dinoX - 4, legTop, SSD1306_WHITE);
+
+  if (!grounded) {
+    display.fillRect(dinoX - 3, legTop, 2, 3, SSD1306_WHITE);
+    display.fillRect(dinoX + 1, legTop, 2, 3, SSD1306_WHITE);
+  } else if (legFrameA) {
+    display.fillRect(dinoX - 3, legTop, 2, 4, SSD1306_WHITE);
+    display.fillRect(dinoX + 1, legTop, 2, 2, SSD1306_WHITE);
+  } else {
+    display.fillRect(dinoX - 3, legTop, 2, 2, SSD1306_WHITE);
+    display.fillRect(dinoX + 1, legTop, 2, 4, SSD1306_WHITE);
+  }
+}
+
+// Same cactus shape as drawDinoRun()'s card preview - cxq is the center x.
+static void drawGameCactus(int cxq, bool big) {
+  int stalkW = big ? 6 : 4;
+  int stalkH = big ? 20 : 14;
+  int armW = big ? 5 : 4;
+  int armH = big ? 5 : 4;
+
+  display.fillRect(cxq - stalkW / 2, GAME_GROUND_Y - stalkH, stalkW, stalkH, SSD1306_WHITE);
+  display.fillRect(cxq - stalkW / 2 - armW, GAME_GROUND_Y - stalkH + 4, armW, armH, SSD1306_WHITE);
+  display.fillRect(cxq + stalkW / 2, GAME_GROUND_Y - stalkH + 6, armW, armH, SSD1306_WHITE);
+}
+
+static void drawGameOverScreen(const GameSnapshot& snap) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-  printCentered("Game Mode\n\n(not built yet -\nlong-press to\ngo back)", 0, OLED_HEIGHT, 9);
+
+  char buf[64];
+  snprintf(buf, sizeof(buf), "GAME OVER\n\nscore: %d\nbest: %d\n\npress to retry",
+           snap.score, snap.bestScore);
+  printCentered(buf, 2, OLED_HEIGHT - 2, 9);
+
   display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
   display.display();
+}
+
+static void drawGamePlayScene(const GameSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.drawLine(6, GAME_GROUND_Y, OLED_WIDTH - 6, GAME_GROUND_Y, SSD1306_WHITE);
+
+  int dinoX = GAME_DINO_X + snap.dinoForwardOffsetPx;
+  bool grounded = (snap.state == GAME_RUNNING) && (snap.dinoHeightPx == 0);
+  drawGameDino(dinoX, snap.dinoHeightPx, grounded, snap.legFrameA);
+
+  if (snap.state == GAME_RUNNING) {
+    if (snap.cactus.active) {
+      drawGameCactus((int)snap.cactus.x, snap.cactus.big);
+    }
+    display.setCursor(4, 4);
+    display.print(snap.score);
+  } else {
+    // GAME_COUNTDOWN - dino stands still (see GameEngine.cpp: leg-cycle
+    // timer doesn't run until GAME_RUNNING starts), no obstacles yet.
+    const char* word = snap.countdownValue == 2 ? "READY" : (snap.countdownValue == 1 ? "SET" : "GO");
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%s\n%d", word, snap.countdownValue);
+    printCentered(buf, 16, 48, 12);
+  }
+
+  display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
+  display.display();
+}
+
+void showGameFrame() {
+  const GameSnapshot& snap = getGameSnapshot();
+  if (snap.state == GAME_OVER) {
+    drawGameOverScreen(snap);
+  } else {
+    drawGamePlayScene(snap);
+  }
+}
+
+static unsigned long lastGameFrameMs = 0;
+
+void updateGameFrame() {
+  unsigned long now = millis();
+  if (now - lastGameFrameMs < GAME_FRAME_INTERVAL_MS) return;
+  lastGameFrameMs = now;
+  stepGame();
+  showGameFrame();
 }
 
 static char lastNightTimeStr[8] = "";

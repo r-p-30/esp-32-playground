@@ -6,6 +6,7 @@
 #include "BuzzerFX.h"
 #include "TimeSync.h"
 #include "RemoteControl.h"
+#include "GameEngine.h"
 
 enum DeviceMode { MODE_CARDS, MODE_GAME };
 
@@ -15,6 +16,11 @@ static DeviceMode mode = MODE_CARDS;
 static bool nightModeActive = false;
 static unsigned long lastWifiCheckMs = 0;
 #define WIFI_RECONNECT_CHECK_MS 10000UL
+
+// Tracks whether the last frame we saw was already game-over, so
+// playGameOver() fires exactly once on the losing hit rather than every
+// loop iteration while the game-over screen sits there waiting for retry.
+static bool gameOverSoundPlayed = false;
 
 // Funnels every card change (manual, remote, or carousel) through one
 // place so the beep and the carousel timer stay consistent regardless of
@@ -28,10 +34,22 @@ static void changeToCard(int index) {
 
 static void showCurrentMode() {
   if (mode == MODE_GAME) {
-    showGamePlaceholder();
+    showGameFrame();
   } else {
     showCard(currentCard);
   }
+}
+
+// Funnels every way into game mode (local long-press, remote toggle-on)
+// through one place, same reasoning as changeToCard() - keeps the fresh
+// Ready/Set/Go countdown and the game-over sound tracker consistent
+// regardless of what triggered entry.
+static void enterGameMode() {
+  mode = MODE_GAME;
+  initGame();
+  gameOverSoundPlayed = false;
+  playChime();
+  showCurrentMode();
 }
 
 static void setNightMode(bool active) {
@@ -45,7 +63,7 @@ static void setNightMode(bool active) {
     // Fresh start after night mode - always back to card browsing, even if
     // game mode was active before night mode was entered (mode isn't
     // touched by entering night mode, so without this reset here,
-    // exiting would redraw the game placeholder instead of cards).
+    // exiting would redraw the mid-run game screen instead of cards).
     mode = MODE_CARDS;
     currentCard = 1;  // naturally lands on "good morning"
     lastCardChangeMs = millis();
@@ -87,10 +105,21 @@ void loop() {
       setNightMode(false);
     }
   } else if (mode == MODE_GAME) {
-    // Short press is reserved for gameplay input once it's built. Long or
+    // Short press either jumps (mid-run) or restarts (on the game-over
+    // screen) - a no-op during the Ready/Set/Go countdown, handled inside
+    // gameJump() itself so a stray press can't pre-queue a jump. Long or
     // very long press both back out to card browsing - very long press
     // does NOT enter night mode from here, only card mode does that.
-    if (ev == ENC_LONG_PRESS || ev == ENC_VERY_LONG_PRESS) {
+    if (ev == ENC_SHORT_PRESS) {
+      if (isGameOver()) {
+        gameRestart();
+        gameOverSoundPlayed = false;
+        showGameFrame();
+      } else if (getGameSnapshot().state == GAME_RUNNING) {
+        gameJump();
+        playGameJump();
+      }
+    } else if (ev == ENC_LONG_PRESS || ev == ENC_VERY_LONG_PRESS) {
       mode = MODE_CARDS;
       playChime();
       showCurrentMode();
@@ -110,9 +139,7 @@ void loop() {
         break;
 
       case ENC_LONG_PRESS:
-        mode = MODE_GAME;
-        playChime();
-        showCurrentMode();
+        enterGameMode();
         break;
 
       case ENC_VERY_LONG_PRESS:
@@ -151,9 +178,13 @@ void loop() {
   }
   int gameChange = consumeRemoteGameModeChange();
   if (gameChange >= 0 && !nightModeActive) {
-    mode = (gameChange == 1) ? MODE_GAME : MODE_CARDS;
-    playChime();
-    showCurrentMode();
+    if (gameChange == 1) {
+      enterGameMode();
+    } else {
+      mode = MODE_CARDS;
+      playChime();
+      showCurrentMode();
+    }
   }
 
   int remoteJump = consumeRemoteCardJump();
@@ -195,5 +226,14 @@ void loop() {
       changeToCard(nextVisibleIndex(currentCard, 1));
     }
     updateDisplayAnimation();
+  } else if (mode == MODE_GAME) {
+    updateGameFrame();
+    // Fires once on the transition into game-over (not every loop while
+    // that screen sits there waiting for a retry press) - see
+    // gameOverSoundPlayed's declaration above.
+    if (isGameOver() && !gameOverSoundPlayed) {
+      gameOverSoundPlayed = true;
+      playGameOver();
+    }
   }
 }

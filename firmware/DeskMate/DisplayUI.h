@@ -12,9 +12,17 @@ void triggerAnimation();
 // Call every loop() iteration. No-op unless an animation is in flight.
 void updateDisplayAnimation();
 
-// Placeholder screen for game mode - the actual game isn't built yet,
-// this just gives the long-press toggle somewhere real to land.
-void showGamePlaceholder();
+// Draws whatever GameEngine's current snapshot is, immediately, without
+// advancing physics - call once right after initGame()/gameRestart() so
+// entering game mode (or restarting after game over) shows a fresh frame
+// without waiting for the next throttled updateGameFrame() tick.
+void showGameFrame();
+
+// Call every loop() iteration while in game mode. Throttles itself to
+// GAME_FRAME_INTERVAL_MS (Config.h) - each time it fires, advances
+// GameEngine's physics one step and redraws. Deliberately slow so the
+// game stays reactable-to on real hardware.
+void updateGameFrame();
 
 // Dims the display and shows the full-screen inverted clock. Call once
 // when entering; call renderNightMode() every loop() iteration after
@@ -23,7 +31,7 @@ void enterNightMode();
 void renderNightMode();
 
 // Restores normal contrast. Caller is responsible for redrawing whatever
-// should show next (showCard() or showGamePlaceholder()).
+// should show next (showCard() or showGameFrame()).
 void exitNightMode();
 
 // Brief screen invert, for the remote "identify" ping - doesn't touch

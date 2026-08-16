@@ -43,6 +43,25 @@
 #define GMT_OFFSET_SEC       (5 * 3600 + 1800)  // TODO: adjust for your timezone (IST default)
 #define DAYLIGHT_OFFSET_SEC  0
 
+// ---- Game mode (hidden dino-jump easter egg) ----
+// Redraws/physics steps deliberately slow (~10fps) - a faster loop made
+// the jump window too tight to react to on real hardware. The jump arc
+// itself is time-based (millis()), not tied to this interval, so it stays
+// smooth regardless.
+#define GAME_FRAME_INTERVAL_MS    100UL
+#define GAME_COUNTDOWN_PHASE_MS   700UL   // Ready/Set/Go, 3 phases = ~2.1s total
+#define GAME_JUMP_DURATION_MS     700UL
+// Jump height auto-picks one of these based on which cactus is active when
+// you press (see GameEngine.cpp's gameJump()) - a single fixed arc either
+// clips the tall cactus or floats needlessly high over the short one.
+// Both leave a clear visual gap over the obstacle's height (not just
+// barely exceeding it) - the shrunk dino sprite in DisplayUI.cpp is small
+// enough that even the big-cactus peak stays safely on-screen.
+#define GAME_JUMP_PEAK_SMALL_PX   26
+#define GAME_JUMP_PEAK_BIG_PX     34
+#define GAME_JUMP_FORWARD_PX      14
+#define GAME_SCROLL_SPEED_PX_S    45.0f
+
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----
 // The device holds one permanent WebSocket connection to the hosted site

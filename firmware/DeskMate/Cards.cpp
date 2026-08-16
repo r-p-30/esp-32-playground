@@ -55,7 +55,7 @@ Card cards[] = {
 
   { "home is where\nyou are", nullptr, 0, 0, ANIM_MAP_PIN, true, ANIMATION_DURATION_MS },
 
-  { "psst... there's\nmore coming", nullptr, 0, 0, ANIM_DINO_RUN, true, ANIMATION_DURATION_MS },
+  { "psst... there's\nmore", nullptr, 0, 0, ANIM_DINO_RUN, true, ANIMATION_DURATION_MS },
 
   { "hehe\n\n;)  xD  :P", nullptr, 0, 0, ANIM_PEEKABOO, true, ANIMATION_DURATION_MS },
 
