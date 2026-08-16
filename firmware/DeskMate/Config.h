@@ -50,17 +50,23 @@
 // smooth regardless.
 #define GAME_FRAME_INTERVAL_MS    100UL
 #define GAME_COUNTDOWN_PHASE_MS   700UL   // Ready/Set/Go, 3 phases = ~2.1s total
-#define GAME_JUMP_DURATION_MS     700UL
+#define GAME_JUMP_DURATION_MS     750UL
 // Jump height auto-picks one of these based on which cactus is active when
 // you press (see GameEngine.cpp's gameJump()) - a single fixed arc either
 // clips the tall cactus or floats needlessly high over the short one.
 // Both leave a clear visual gap over the obstacle's height (not just
 // barely exceeding it) - the shrunk dino sprite in DisplayUI.cpp is small
-// enough that even the big-cactus peak stays safely on-screen.
-#define GAME_JUMP_PEAK_SMALL_PX   26
-#define GAME_JUMP_PEAK_BIG_PX     34
+// enough that even the big-cactus peak (36) stays on-screen, just a couple
+// px shy of the top border.
+#define GAME_JUMP_PEAK_SMALL_PX   28
+#define GAME_JUMP_PEAK_BIG_PX     36
 #define GAME_JUMP_FORWARD_PX      14
 #define GAME_SCROLL_SPEED_PX_S    45.0f
+// Grace subtracted from the cactus height a jump needs to clear - a
+// rotary-encoder button press can't be timed as precisely as a mouse
+// click, so a jump that's a few px short of the obstacle's literal top
+// still counts as cleared, rather than punishing normal input jitter.
+#define GAME_JUMP_CLEARANCE_FORGIVENESS_PX  6
 
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----

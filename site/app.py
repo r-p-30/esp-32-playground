@@ -215,6 +215,27 @@ def dashboard():
     )
 
 
+@app.get("/dashboard/status")
+@login_required
+def dashboard_status():
+    # Polled by dashboard-status.js every few seconds so the connection
+    # line and the Night/Game mode toggles stay live without a manual page
+    # refresh - night/game mode in particular can change from the device's
+    # physical button (see sync_modes_from_heartbeat() in state.py), which
+    # a static server-rendered page would otherwise never pick up until
+    # the next full reload.
+    heartbeat = state.load_heartbeat()
+    last_seen_sec_ago = int(time.time()) - heartbeat["receivedAt"] if heartbeat else None
+    st = state.load_state()
+    return jsonify({
+        "connected": _device_ws is not None,
+        "lastSeenSecAgo": last_seen_sec_ago,
+        "heartbeat": heartbeat,
+        "nightModeEnabled": st.get("nightModeEnabled", False),
+        "gameModeEnabled": st.get("gameModeEnabled", False),
+    })
+
+
 @app.post("/dashboard/buzz")
 @login_required
 def action_buzz():

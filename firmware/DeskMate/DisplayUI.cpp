@@ -1299,7 +1299,9 @@ static void drawGameOverScreen(const GameSnapshot& snap) {
            snap.score, snap.bestScore);
   printCentered(buf, 2, OLED_HEIGHT - 2, 9);
 
-  display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
+  // No permanent frame here (unlike drawCardFrame()'s cards) - game mode
+  // is already tight on vertical room for the jump arc, and the border
+  // reads as more constricting than useful on a screen this small.
   display.display();
 }
 
@@ -1329,7 +1331,7 @@ static void drawGamePlayScene(const GameSnapshot& snap) {
     printCentered(buf, 16, 48, 12);
   }
 
-  display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
+  // No permanent frame - see drawGameOverScreen()'s comment.
   display.display();
 }
 

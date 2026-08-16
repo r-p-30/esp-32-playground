@@ -13,17 +13,15 @@
 
   <section class="card col-actions">
     <p class="status-dot">
-      {% if device_connected %}
-        <strong class="conn-on">&#9679; Connected</strong>
-      {% else %}
-        <strong class="conn-off">&#9679; Not connected</strong>
-      {% endif %}
+      <strong id="conn-indicator" class="{{ 'conn-on' if device_connected else 'conn-off' }}">&#9679; {{ 'Connected' if device_connected else 'Not connected' }}</strong>
     </p>
-    {% if heartbeat %}
-      <p class="hint">Last seen {{ last_seen_sec_ago }}s ago &middot; card {{ heartbeat.currentCard }}{% if heartbeat.nightMode %} &middot; night{% endif %}{% if heartbeat.gameMode %} &middot; game{% endif %} &middot; up {{ heartbeat.uptimeSec }}s</p>
-    {% else %}
-      <p class="hint">No heartbeat yet - waiting on the device's first one after connecting.</p>
-    {% endif %}
+    <p class="hint" id="heartbeat-hint">
+      {%- if heartbeat -%}
+        Last seen {{ last_seen_sec_ago }}s ago &middot; card {{ heartbeat.currentCard }}{% if heartbeat.nightMode %} &middot; night{% endif %}{% if heartbeat.gameMode %} &middot; game{% endif %} &middot; up {{ heartbeat.uptimeSec }}s
+      {%- else -%}
+        No heartbeat yet - waiting on the device's first one after connecting.
+      {%- endif -%}
+    </p>
 
     <h2>Quick actions</h2>
     <div class="button-row">
@@ -37,7 +35,7 @@
       <div class="toggle-row">
         <span>Night mode</span>
         <label class="toggle">
-          <input type="checkbox" name="enabled" aria-label="Night mode" {% if state.nightModeEnabled %}checked{% endif %} onchange="this.form.submit()">
+          <input type="checkbox" id="night-mode-checkbox" name="enabled" aria-label="Night mode" {% if state.nightModeEnabled %}checked{% endif %} onchange="this.form.submit()">
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
         </label>
       </div>
@@ -46,7 +44,7 @@
       <div class="toggle-row">
         <span>Game mode</span>
         <label class="toggle">
-          <input type="checkbox" name="enabled" aria-label="Game mode" {% if state.gameModeEnabled %}checked{% endif %} onchange="this.form.submit()">
+          <input type="checkbox" id="game-mode-checkbox" name="enabled" aria-label="Game mode" {% if state.gameModeEnabled %}checked{% endif %} onchange="this.form.submit()">
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
         </label>
       </div>
@@ -178,4 +176,5 @@
 <script src="{{ url_for('static', filename='emoji.js') }}"></script>
 <script src="{{ url_for('static', filename='card-preview.js') }}"></script>
 <script>renderPreview();</script>
+<script src="{{ url_for('static', filename='dashboard-status.js') }}"></script>
 {% endblock %}

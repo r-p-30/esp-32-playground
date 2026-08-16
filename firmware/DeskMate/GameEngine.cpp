@@ -22,9 +22,12 @@
 // World-space gap (px) after the current cactus fully exits, before the
 // next one spawns - single obstacle in play at a time (see GameCactus in
 // GameEngine.h), so this is what makes the next one "anticipatable"
-// instead of appearing right on top of the last one landing.
-#define SPAWN_GAP_MIN_PX  70
-#define SPAWN_GAP_MAX_PX  130
+// instead of appearing right on top of the last one landing. Generous on
+// purpose - a rotary-encoder button needs more setup time per jump than a
+// mouse click would, so a tight rhythm here reads as unfair rather than
+// challenging.
+#define SPAWN_GAP_MIN_PX  110
+#define SPAWN_GAP_MAX_PX  190
 
 static GameRunState runState = GAME_COUNTDOWN;
 static unsigned long countdownStartMs = 0;
@@ -178,7 +181,11 @@ void stepGame() {
     float cactusH = cactus.big ? CACTUS_BIG_H : CACTUS_SMALL_H;
 
     bool horizOverlap = fabsf(dinoCenterX - cactus.x) < (DINO_HITBOX_HALF_W + cactusHalfW);
-    bool notCleared = dinoHeightPx < (int)cactusH;
+    // Forgiveness knocked off the required height, not added to the
+    // hitbox width - a near-miss on timing (jumped a beat early/late)
+    // should still count as cleared; a genuine same-height collision
+    // shouldn't become unwinnable-feeling on top of it.
+    bool notCleared = dinoHeightPx < ((int)cactusH - GAME_JUMP_CLEARANCE_FORGIVENESS_PX);
     if (horizOverlap && notCleared) {
       runState = GAME_OVER;
     }
