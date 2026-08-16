@@ -191,7 +191,7 @@ def dashboard():
     all_cards = state.load_cards()
     edit_index = request.args.get("edit", type=int)
     if edit_index is None or not (0 <= edit_index < state.NUM_CARDS):
-        edit_index = next((c["index"] for c in all_cards if not c["populated"]), 0)
+        edit_index = next((c["index"] for c in all_cards if not c["populated"]), state.CUSTOM_CARD_INDEX)
 
     return render_template(
         "dashboard.html",
@@ -201,6 +201,7 @@ def dashboard():
         device_connected=_device_ws is not None,
         cards=all_cards,
         edit_index=edit_index,
+        custom_card_index=state.CUSTOM_CARD_INDEX,
         emoji_families=all_emoji_families(all_cards[edit_index]),
         border_flash_checked=not (all_cards[edit_index].get("animatedEmojiDisableMask", 0) & (1 << BORDER_FLASH_DISABLE_BIT)),
     )

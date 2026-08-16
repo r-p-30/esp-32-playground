@@ -27,17 +27,24 @@ SEED_CARDS = [
     {"index": 17, "text": "hehe\n\n;)  xD  :P", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
     {"index": 18, "text": "how you doin'", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
     {"index": 19, "text": "shit happens!\nflush it &\nmove on", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
-    {"index": 20, "text": "-- empty slot --\n\nnothing here\nyet", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": False},
+    {"index": 20, "text": "-- empty slot --\n\nnothing here\nyet", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": False, "custom": True},
     {"index": 21, "text": "good night", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
     {"index": 22, "text": "let it snow", "animationDurationMs": ANIMATION_DURATION_MS_DEFAULT, "populated": True},
 ]
 
 # Layout defaults - only visible on the device for cards using the generic
-# ANIM_BOUNCE layout (the reserved/custom slot, index 20 by default) - see
-# Cards.h. "center"/"middle" here matches every built-in card's fixed
+# ANIM_BOUNCE layout (the reserved/custom slot, marked "custom": True above)
+# - see Cards.h. "center"/"middle" here matches every built-in card's fixed
 # hand-drawn layout, so this is a safe no-op default for the other 21.
 for _card in SEED_CARDS:
     _card.setdefault("alignH", "center")
     _card.setdefault("alignV", "middle")
     _card.setdefault("cornerEmoji", ["", "", "", ""])  # [topLeft, topRight, bottomLeft, bottomRight]
     _card.setdefault("animatedEmojiDisableMask", 0)  # 0 = every emoji family animates by default
+
+# The reserved/custom slot's index, read off whichever SEED_CARDS entry is
+# tagged "custom": True above instead of a hardcoded number - so reordering
+# cards[] in firmware/DeskMate/Cards.cpp (and mirroring that reorder here)
+# just means moving the "custom": True tag along with the entry, not hunting
+# down every place that assumed it stays at index 20.
+CUSTOM_CARD_INDEX = next(c["index"] for c in SEED_CARDS if c.get("custom"))

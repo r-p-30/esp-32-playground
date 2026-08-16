@@ -13,7 +13,7 @@ import json
 import os
 import time
 
-from cards_seed import SEED_CARDS
+from cards_seed import CUSTOM_CARD_INDEX, SEED_CARDS
 
 INSTANCE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance")
 STATE_PATH = os.path.join(INSTANCE_DIR, "state.json")
