@@ -89,11 +89,14 @@ static const struct { const char* code; char glyph; } EMOJI_SHORTCODES[] = {
   { ":heart:", (char)0x03 },
   { ":smile:", (char)0x01 },
   { ":smileb:", (char)0x02 },
-  { ":spade:", (char)0x06 },
-  { ":club:", (char)0x05 },
+  { ":sparkle:", (char)0x0F },
   { ":diamond:", (char)0x04 },
   { ":note:", (char)0x0D },
   { ":notes:", (char)0x0E },
+  // No true snowflake glyph exists in CP437 (this font's only symbol
+  // set) - 0x07 (a filled circle/bullet) is the closest safe stand-in
+  // that a normal typed message would never produce by accident.
+  { ":snowflake:", (char)0x07 },
 };
 static const int NUM_EMOJI_SHORTCODES = sizeof(EMOJI_SHORTCODES) / sizeof(EMOJI_SHORTCODES[0]);
 
@@ -111,6 +114,18 @@ const char* glyphToEmojiShortcode(char glyph) {
     if (EMOJI_SHORTCODES[i].glyph == glyph) return EMOJI_SHORTCODES[i].code;
   }
   return "";
+}
+
+EmojiAnimFamily glyphToEmojiAnimFamily(char glyph) {
+  switch ((uint8_t)glyph) {
+    case 0x03: return EMOJI_ANIM_HEART;
+    case 0x01: case 0x02: return EMOJI_ANIM_SMILE;
+    case 0x0F: return EMOJI_ANIM_SPARKLE;
+    case 0x04: return EMOJI_ANIM_DIAMOND;
+    case 0x0D: case 0x0E: return EMOJI_ANIM_NOTES;
+    case 0x07: return EMOJI_ANIM_SNOWFLAKE;
+    default: return EMOJI_ANIM_NONE;
+  }
 }
 
 static void applyEmojiShortcodes(char* text) {
@@ -163,6 +178,11 @@ void setCardCornerEmoji(int index, int corner, char glyph) {
   if (corner < 0 || corner > 3) return;
   int wrapped = ((index % NUM_CARDS) + NUM_CARDS) % NUM_CARDS;
   cards[wrapped].cornerEmoji[corner] = glyph;
+}
+
+void setCardAnimatedEmojiDisableMask(int index, uint8_t disableMask) {
+  int wrapped = ((index % NUM_CARDS) + NUM_CARDS) % NUM_CARDS;
+  cards[wrapped].animatedEmojiDisableMask = disableMask;
 }
 
 static bool isCardVisible(int index) {

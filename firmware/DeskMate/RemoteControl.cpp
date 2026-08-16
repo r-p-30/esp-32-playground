@@ -127,6 +127,9 @@ static void applyStateJson(const uint8_t* payload, size_t length) {
           setCardCornerEmoji(idx, c, emojiShortcodeToGlyph(corners[c].as<const char*>()));
         }
       }
+      if (!doc["cardAnimatedEmojiDisableMask"].isNull()) {
+        setCardAnimatedEmojiDisableMask(idx, doc["cardAnimatedEmojiDisableMask"].as<uint8_t>());
+      }
     }
     if (!doc["showCard"].isNull()) {
       pendingCardJump = doc["showCard"].as<int>();
@@ -186,6 +189,7 @@ static void sendCardsReport() {
     for (int k = 0; k < 4; k++) {
       corners.add(glyphToEmojiShortcode(c.cornerEmoji[k]));
     }
+    o["animatedEmojiDisableMask"] = c.animatedEmojiDisableMask;
   }
   String out;
   serializeJson(doc, out);

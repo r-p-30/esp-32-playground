@@ -39,3 +39,4 @@ for _card in SEED_CARDS:
     _card.setdefault("alignH", "center")
     _card.setdefault("alignV", "middle")
     _card.setdefault("cornerEmoji", ["", "", "", ""])  # [topLeft, topRight, bottomLeft, bottomRight]
+    _card.setdefault("animatedEmojiDisableMask", 0)  # 0 = every emoji family animates by default

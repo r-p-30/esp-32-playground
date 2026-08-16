@@ -21,6 +21,32 @@ DEVICE_API_KEY = os.environ.get("DEVICE_API_KEY")
 
 DEVICE_STATE_FIELDS = list(state.DEFAULT_STATE.keys())
 
+# Mirrors EmojiAnimFamily in Cards.h - which shortcodes share one default
+# animation/toggle. "bit" matches the firmware's Card::animatedEmojiDisableMask
+# bit layout exactly, so the mask computed here means the same thing there.
+EMOJI_FAMILIES = [
+    {"key": "heart", "label": "Heart", "glyph": "♥", "codes": [":heart:"], "bit": 0},
+    {"key": "smile", "label": "Smile", "glyph": "☺", "codes": [":smile:", ":smileb:"], "bit": 1},
+    {"key": "sparkle", "label": "Sparkle", "glyph": "☼", "codes": [":sparkle:"], "bit": 2},
+    {"key": "diamond", "label": "Diamond", "glyph": "♦", "codes": [":diamond:"], "bit": 3},
+    {"key": "notes", "label": "Notes", "glyph": "♪", "codes": [":note:", ":notes:"], "bit": 4},
+    {"key": "snowflake", "label": "Snowflake", "glyph": "•", "codes": [":snowflake:"], "bit": 5},
+]
+
+
+def used_emoji_families(card):
+    """Families with at least one shortcode present in this card's text or
+    corner slots - only these get an animate toggle in the UI (see
+    dashboard.html), since a toggle for an emoji that isn't even on the
+    card wouldn't do anything on the device either."""
+    haystack = (card.get("text") or "") + " " + " ".join(card.get("cornerEmoji") or [])
+    disable_mask = card.get("animatedEmojiDisableMask", 0)
+    used = []
+    for fam in EMOJI_FAMILIES:
+        if any(code in haystack for code in fam["codes"]):
+            used.append({**fam, "checked": not (disable_mask & (1 << fam["bit"]))})
+    return used
+
 
 # ---- Device-facing API (docs/remote-api-spec.md) ----
 # Auth is a shared secret header, not a login - deliberately separate from
@@ -164,6 +190,7 @@ def dashboard():
         device_connected=_device_ws is not None,
         cards=all_cards,
         edit_index=edit_index,
+        used_emoji_families=used_emoji_families(all_cards[edit_index]),
     )
 
 
@@ -248,12 +275,26 @@ def card_save(index):
     duration_ms = int(request.form.get("durationMs") or 1000)
     make_active = request.form.get("makeActive") == "on"
 
+    # Animate toggles only exist in the form for families that were used
+    # (and thus shown) as of the page load this submission came from - a
+    # family the user just added to the text in this same edit won't have
+    # a toggle yet (starts enabled by default; shows up next save).
+    old_card = state.load_cards()[index]
+    disable_mask = old_card.get("animatedEmojiDisableMask", 0)
+    for fam in used_emoji_families(old_card):
+        field = f"animate_{fam['key']}"
+        if request.form.get(field) == "on":
+            disable_mask &= ~(1 << fam["bit"])
+        else:
+            disable_mask |= (1 << fam["bit"])
+
     update = {
         "cardTextIndex": index,
         "cardText": text,
         "cardTextAlignH": align_h,
         "cardTextAlignV": align_v,
         "cardCornerEmoji": corner_emoji,
+        "cardAnimatedEmojiDisableMask": disable_mask,
         "cardAnimationDurationIndex": index,
         "cardAnimationDurationMs": duration_ms,
     }
@@ -262,6 +303,7 @@ def card_save(index):
     state.apply_update(update)
     state.set_card_text(index, text)
     state.set_card_layout(index, align_h, align_v, corner_emoji)
+    state.set_card_animated_emoji_mask(index, disable_mask)
     state.set_card_animation_duration(index, duration_ms)
     _push_state_to_device()
     flash(f"Card {index} saved{' and made active.' if make_active else '.'}", "success")

@@ -7,6 +7,7 @@
 #include <string.h>
 #include "TimeSync.h"
 #include "WifiUtil.h"
+#include "DisplayUI.h"
 #include "Config.h"
 
 static bool timeSynced = false;
@@ -110,6 +111,7 @@ void syncTime() {
   if (connected) {
     Serial.print("WiFi connected, IP: ");
     Serial.println(WiFi.localIP());
+    showWifiConnected(WiFi.localIP().toString().c_str());
     Serial.println("Syncing time via NTP...");
     // Multiple fallback servers - some networks (mobile hotspots especially)
     // block or drop specific NTP hosts over UDP/123, so trying a few
@@ -138,6 +140,7 @@ void syncTime() {
     }
   } else {
     Serial.println("WiFi connect timed out - continuing offline.");
+    showWifiFailed();
   }
 
   // Deliberately left connected (unlike the old battery-conscious Phase 1

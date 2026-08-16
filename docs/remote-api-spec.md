@@ -171,19 +171,43 @@ Use these shortcodes in `cardText` and the device swaps them in automatically;
 build your site's emoji picker around this exact list rather than letting
 people type arbitrary emoji:
 
-| Shortcode | Renders as |
-|---|---|
-| `:heart:` | ♥ |
-| `:smile:` | ☺ |
-| `:smileb:` | ☻ (filled) |
-| `:spade:` | ♠ |
-| `:club:` | ♣ |
-| `:diamond:` | ♦ |
-| `:note:` | ♪ |
-| `:notes:` | ♫ |
+| Shortcode | Renders as | Default animation family |
+|---|---|---|
+| `:heart:` | ♥ | heart |
+| `:smile:` | ☺ | smile |
+| `:smileb:` | ☻ (filled) | smile |
+| `:sparkle:` | ☼ | sparkle |
+| `:diamond:` | ♦ | diamond |
+| `:note:` | ♪ | notes |
+| `:notes:` | ♫ | notes |
+| `:snowflake:` | • | snowflake |
 
 Worth a visual check on real hardware once flashed — these are standard
-CP437 codepoints but I haven't been able to render-test them myself.
+CP437 codepoints but I haven't been able to render-test them myself. No
+`:spade:`/`:club:` anymore (removed - not used) and no true snowflake
+glyph exists in CP437, so `:snowflake:` reuses the plain bullet/circle
+character (0x07) as the closest safe stand-in that normal typed text
+would never produce by accident.
+
+### Default per-emoji animations
+
+Any of the 6 "animation families" above (smile covers both smile
+shortcodes, notes covers both note shortcodes) gets a small built-in
+animation during the card's press-animation window, **only on cards
+using the generic bounce layout** (same caveat as alignment/corner
+decorations - see above) - heart beats, smile alternates between the
+outline/filled glyph, sparkle twinkles, diamond bursts a little, notes
+cycles single/double with a bob, snowflake orbits in a small circle (see
+`drawAnimatedGlyph()` in `DisplayUI.cpp`). This applies to the glyph
+wherever it appears - inline in the text or as a corner decoration.
+
+Animation is **on by default** for every family present on a card;
+`cardAnimatedEmojiDisableMask` (number, optional, tied to `cardTextIndex`
+like the fields above) turns specific families off per-card. Bit *i* set
+= family *i*'s animation is disabled: `0=heart, 1=smile, 2=sparkle,
+3=diamond, 4=notes, 5=snowflake`. The site only exposes a toggle for
+families actually present on the card (no point animating something
+that isn't there) - see `used_emoji_families()` in `site/app.py`.
 
 ## Physical button reference
 

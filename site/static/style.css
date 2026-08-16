@@ -66,6 +66,7 @@ main {
 
 h1 { font-size: 1.25rem; margin-top: 0; margin-bottom: 0.5rem; }
 h2 { font-size: 1rem; margin-top: 0; margin-bottom: 0.4rem; }
+h2:not(:first-child) { margin-top: 1rem; }
 .hint { color: var(--muted); font-size: 0.9rem; }
 .error { color: #ff6b6b; }
 .badge {
@@ -77,6 +78,13 @@ h2 { font-size: 1rem; margin-top: 0; margin-bottom: 0.4rem; }
 }
 
 label { display: block; margin-top: 0.5rem; font-size: 0.9rem; color: var(--muted); }
+
+.field-heading {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 1rem;
+}
 
 input[type="text"], input[type="password"], input[type="number"], textarea {
   width: 100%;
@@ -135,6 +143,11 @@ button, .link-btn {
   height: 3.6rem;
   font-size: 2.6rem;
   margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .empty-slot { border-style: dashed; opacity: 0.85; }
@@ -224,10 +237,24 @@ select {
 
 .card-picker-btn.empty { border-style: dashed; }
 
+.align-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 0.4rem;
+}
+
+.align-col-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.3rem;
+}
+
 .align-group {
   display: flex;
-  gap: 0.75rem;
-  margin-top: 0.4rem;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .align-group label {
@@ -302,6 +329,21 @@ select {
   justify-content: space-between;
   gap: 0.75rem;
   margin-top: 0.6rem;
+}
+
+.save-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.save-row button { margin-top: 0; }
+
+.toggle-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .toggle {

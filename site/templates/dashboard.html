@@ -4,6 +4,7 @@
 {% block content %}
 
 {% set edit_card = cards[edit_index] %}
+{% set EMOJI_LIST = [(':heart:','♥'), (':smile:','☺'), (':smileb:','☻'), (':sparkle:','☼'), (':diamond:','♦'), (':note:','♪'), (':notes:','♫'), (':snowflake:','•')] %}
 
 <div class="home-grid">
 
@@ -65,7 +66,7 @@
 
   <section class="card col-editor">
     <h1>Card editor</h1>
-    <p class="hint">Index 20 is the reserved empty slot by default - filling its text "adds" a card without reflashing.</p>
+    <p class="hint">Index 20 is the reserved empty slot by default.</p>
 
     <div class="card-picker">
       {% for c in cards %}
@@ -81,32 +82,39 @@
       <label for="text">Text</label>
       <textarea id="text" name="text" rows="4" oninput="renderPreview()">{{ edit_card.text }}</textarea>
       <div class="emoji-row">
-        {% for code, glyph in [(':heart:','♥'), (':smile:','☺'), (':smileb:','☻'), (':spade:','♠'), (':club:','♣'), (':diamond:','♦'), (':note:','♪'), (':notes:','♫')] %}
+        {% for code, glyph in EMOJI_LIST %}
         <button type="button" class="emoji-btn" onclick="insertShortcode('text', '{{ code }}')" title="{{ code }}">{{ glyph }}</button>
         {% endfor %}
       </div>
-      <p class="hint">Alignment/corner decorations only apply if this card uses the default "bounce" layout (true for the reserved slot).</p>
 
-      <label>Text alignment</label>
-      <div class="align-group">
-        {% for v, l in [('left','Left'), ('center','Center'), ('right','Right')] %}
-        <label><input type="radio" name="alignH" value="{{ v }}" {% if edit_card.alignH == v %}checked{% endif %} onchange="renderPreview()"> {{ l }}</label>
-        {% endfor %}
-      </div>
-      <div class="align-group">
-        {% for v, l in [('top','Top'), ('middle','Middle'), ('bottom','Bottom')] %}
-        <label><input type="radio" name="alignV" value="{{ v }}" {% if edit_card.alignV == v %}checked{% endif %} onchange="renderPreview()"> {{ l }}</label>
-        {% endfor %}
+      <label class="field-heading">Text alignment</label>
+      <div class="align-columns">
+        <div class="align-col">
+          <span class="align-col-label">Horizontal</span>
+          <div class="align-group">
+            {% for v, l in [('left','Left'), ('center','Center'), ('right','Right')] %}
+            <label><input type="radio" name="alignH" value="{{ v }}" {% if edit_card.alignH == v %}checked{% endif %} onchange="renderPreview()"> {{ l }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="align-col">
+          <span class="align-col-label">Vertical</span>
+          <div class="align-group">
+            {% for v, l in [('top','Top'), ('middle','Middle'), ('bottom','Bottom')] %}
+            <label><input type="radio" name="alignV" value="{{ v }}" {% if edit_card.alignV == v %}checked{% endif %} onchange="renderPreview()"> {{ l }}</label>
+            {% endfor %}
+          </div>
+        </div>
       </div>
 
-      <label>Corner emoji</label>
+      <label class="field-heading">Corner emoji</label>
       <div class="corner-grid">
         {% for i, corner_label in [(0,'Top-left'), (1,'Top-right'), (2,'Bottom-left'), (3,'Bottom-right')] %}
         <div>
           <label for="corner{{ i }}">{{ corner_label }}</label>
           <select id="corner{{ i }}" name="corner{{ i }}" onchange="renderPreview()">
             <option value="" {% if not edit_card.cornerEmoji[i] %}selected{% endif %}>None</option>
-            {% for code, glyph in [(':heart:','♥'), (':smile:','☺'), (':smileb:','☻'), (':spade:','♠'), (':club:','♣'), (':diamond:','♦'), (':note:','♪'), (':notes:','♫')] %}
+            {% for code, glyph in EMOJI_LIST %}
             <option value="{{ code }}" {% if edit_card.cornerEmoji[i] == code %}selected{% endif %}>{{ glyph }} {{ code }}</option>
             {% endfor %}
           </select>
@@ -117,15 +125,28 @@
       <label for="durationMs">Animation duration (ms)</label>
       <input type="number" id="durationMs" name="durationMs" min="100" step="100" value="{{ edit_card.animationDurationMs }}">
 
+      {% if used_emoji_families %}
+      <label class="field-heading">Emoji animations</label>
+      <p class="hint">Only for emoji actually used in this card's text/corners above - each defaults to on.</p>
+      {% for fam in used_emoji_families %}
       <div class="toggle-row">
-        <span>Make this the active card</span>
+        <span>{{ fam.glyph }} {{ fam.label }}</span>
         <label class="toggle">
-          <input type="checkbox" name="makeActive" aria-label="Make this the active card">
+          <input type="checkbox" name="animate_{{ fam.key }}" aria-label="Animate {{ fam.label }}" {% if fam.checked %}checked{% endif %}>
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
         </label>
       </div>
+      {% endfor %}
+      {% endif %}
 
-      <div class="button-row">
+      <div class="save-row">
+        <div class="toggle-inline">
+          <span>make this card active</span>
+          <label class="toggle">
+            <input type="checkbox" name="makeActive" aria-label="Make this card active">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
         <button type="submit">Save card {{ edit_index }}</button>
       </div>
     </form>

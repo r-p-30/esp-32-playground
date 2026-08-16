@@ -30,6 +30,7 @@ ONE_SHOT_NEUTRAL = {
     "cardTextAlignH": None,
     "cardTextAlignV": None,
     "cardCornerEmoji": None,
+    "cardAnimatedEmojiDisableMask": None,
     "buzz": False,
     "triggerAnimation": False,
     "identifyPing": False,
@@ -113,6 +114,8 @@ def import_cards_from_device(cards_report):
             "alignH": entry.get("alignH", by_index[index]["alignH"]),
             "alignV": entry.get("alignV", by_index[index]["alignV"]),
             "cornerEmoji": entry.get("cornerEmoji", by_index[index]["cornerEmoji"]),
+            "animatedEmojiDisableMask": entry.get(
+                "animatedEmojiDisableMask", by_index[index].get("animatedEmojiDisableMask", 0)),
         })
     save_cards(cards)
 
@@ -131,6 +134,12 @@ def set_card_text(index, text):
 def set_card_animation_duration(index, duration_ms):
     cards = load_cards()
     cards[index]["animationDurationMs"] = duration_ms
+    save_cards(cards)
+
+
+def set_card_animated_emoji_mask(index, disable_mask):
+    cards = load_cards()
+    cards[index]["animatedEmojiDisableMask"] = disable_mask
     save_cards(cards)
 
 

@@ -17,7 +17,7 @@ The device holds a permanent WebSocket connection to this site (it's USB-powered
 | Buzz the device | `buzz` | Distinct 3-beep pattern, separate from the routine navigation beep |
 | Play the current card's animation | `triggerAnimation` | Same animation as a short press, no button needed |
 | Carousel / auto-advance | `carouselEnabled` + `carouselIntervalSec` | Continuous setting, not a one-time action. **Device enforces a hard 1-hour auto-stop** regardless of what's sent — see below |
-| Emoji in card text | `:heart:` `:smile:` `:smileb:` `:spade:` `:club:` `:diamond:` `:note:` `:notes:` shortcodes | Only these 8 render correctly — see constraint below |
+| Emoji in card text | `:heart:` `:smile:` `:smileb:` `:sparkle:` `:diamond:` `:note:` `:notes:` `:snowflake:` shortcodes | Only these 8 render correctly — see constraint below. Each has a default press-animation (heart beats, smile alternates, etc.) on cards using the bounce layout — see `remote-api-spec.md` |
 | Text alignment on the custom card | `cardTextAlignH` + `cardTextAlignV` | Only visible on cards using the generic bounce layout (the reserved slot by default) - see remote-api-spec.md |
 | Corner-emoji decorations on the custom card | `cardCornerEmoji` (array of 4) | Same bounce-layout-only caveat as alignment |
 | "Is this thing on?" check | `identifyPing` | Beeps twice + flashes the screen, touches nothing else — useful while building the site |

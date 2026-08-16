@@ -34,3 +34,10 @@ void flashIdentify();
 // (WifiUtil.cpp) - so the screen isn't just frozen/blank during that
 // window. apName is whatever the user should look for and join.
 void showWifiSetupPrompt(const char* apName);
+
+// Shown briefly right after the boot-time connect attempt resolves
+// (TimeSync.cpp) - so success/failure is visible on the device itself,
+// not just in the serial monitor. Blocks for a couple seconds so there's
+// time to actually read it before boot continues into the card browser.
+void showWifiConnected(const char* ip);
+void showWifiFailed();

@@ -39,7 +39,9 @@ short-press animation.
 **Fully offline-first**: none of the above needs WiFi. A brief NTP sync
 happens once at boot (with an HTTPS-header fallback if NTP is blocked on
 the network) and the device works completely standalone if it never
-connects at all.
+connects at all. If the WiFi setup portal opens (nothing configured or
+the last network stopped working), a long-press on the encoder skips
+straight to offline instead of waiting out the full portal timeout.
 
 ## Remote control (optional)
 
@@ -65,7 +67,7 @@ Once connected, it can be remotely told to:
 - Jump to any card, with the normal navigation beep
 - Edit any existing card's text, or fill the reserved slot to add a new card without reflashing
 - Set that card's text alignment (left/center/right, top/middle/bottom) and pin up to 4 corner-emoji decorations — only visible on cards using the generic layout (the reserved slot by default), since every built-in animated card has its own fixed hand-drawn layout
-- Insert a small set of emoji-like symbols via shortcodes (`:heart:`, `:smile:`, `:note:`, etc. — the OLED's font can't render real Unicode emoji)
+- Insert a small set of emoji-like symbols via shortcodes (`:heart:`, `:smile:`, `:note:`, etc. — the OLED's font can't render real Unicode emoji), each with a default press-animation (heart beats, notes spin, etc.) toggleable per-card from the site
 - Buzz the device, or trigger the active card's animation, without anyone touching the button
 - Send an "identify" ping (double-beep + screen flash) to confirm connectivity while debugging the site
 - Run a carousel (auto-advancing cards) with a configurable interval — hard-capped at 1 hour of continuous runtime so a forgotten toggle can't leave it running indefinitely
@@ -101,7 +103,7 @@ State is persisted via `state.py`; see `site/state.py` for the storage details.
 
 1. Install the ESP32 board core + Adafruit SSD1306, Adafruit GFX, ArduinoJson, WiFiManager, and WebSockets (Markus Sattler / `Links2004/arduinoWebSockets`) libraries (Arduino IDE Library Manager, or `arduino-cli lib install`).
 2. **Board setting**: Tools → Partition Scheme → **"Huge APP (3MB No OTA/1MB SPIFFS)"**. The WebSockets library pushes flash usage past the default scheme's limit — this isn't optional. Changing it reshuffles flash layout, so the first flash after switching may force a fresh WiFiManager setup even on a previously-configured board.
-3. Copy `WifiCredentials.example.h` → `WifiCredentials.h` and fill in a name/password for the temporary WiFiManager setup portal (gitignored, never commit). Actual WiFi credentials aren't hardcoded anywhere — the device reconnects via whatever's already stored in NVS from a past successful connect, and falls back to that setup portal if nothing's stored yet.
+3. Copy `WifiCredentials.example.h` → `WifiCredentials.h` (gitignored, never commit) and fill in a name/password for the temporary WiFiManager setup portal. `WIFI_SSID`/`WIFI_PASSWORD` are optional there too — leave blank to rely on NVS + the portal, or fill them in to bypass the portal entirely on your own network (tried right after the NVS reconnect, before the portal broadcasts — see the three-tier fallback in `connectWiFiAtBootWithSetupFallback()`, `WifiUtil.cpp`).
 4. Optional — copy `RemoteApi.example.h` → `RemoteApi.h` and fill in the site's `wss://` endpoint + the shared `DEVICE_API_KEY` to enable remote control (also gitignored).
 5. Flash `firmware/DeskMate/DeskMate.ino`.
 

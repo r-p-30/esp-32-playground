@@ -57,13 +57,103 @@ static void printCentered(const char* text, int yTop, int yBottom, int lineHeigh
   }
 }
 
+// Renders one emoji glyph's default animation in place of a plain print()
+// - only called for glyphs whose family is animate-enabled on this card
+// (see Card::animatedEmojiDisableMask) while a press-animation is running.
+// x/y is the same cursor position a plain display.print() would have
+// used; textSize matches whatever the caller drew everything else at (1
+// for inline text, 2 for corner decorations) so this scales with it.
+// Each case is deliberately simple - a 5x7 (or 10x14 at 2x) glyph cell
+// doesn't have room for anything elaborate, just a clear "this one's
+// animating" cue timed against the card's overall animation progress
+// (0-1 over the full press-animation duration).
+static void drawAnimatedGlyph(EmojiAnimFamily family, int x, int y, float progress, uint8_t textSize) {
+  display.setTextSize(textSize);
+  switch (family) {
+    case EMOJI_ANIM_HEART: {
+      // Two quick beats then a pause, like an actual heartbeat, rather
+      // than a steady blink.
+      float p = fmodf(progress * 3.0f, 1.0f);
+      bool visible = (p < 0.15f) || (p > 0.25f && p < 0.4f);
+      if (visible) {
+        display.setCursor(x, y);
+        display.print((char)0x03);
+      }
+      break;
+    }
+    case EMOJI_ANIM_SMILE: {
+      // Alternates the outline (0x01) and filled (0x02) glyphs - reads
+      // as cycling between a small smile and a full grin.
+      char g = (fmodf(progress * 6.0f, 1.0f) < 0.5f) ? (char)0x01 : (char)0x02;
+      display.setCursor(x, y);
+      display.print(g);
+      break;
+    }
+    case EMOJI_ANIM_SPARKLE: {
+      float p = fmodf(progress * 8.0f, 1.0f);
+      if (p < 0.55f) {
+        display.setCursor(x, y);
+        display.print((char)0x0F);
+        if (p < 0.15f) {
+          display.drawPixel(x - 2 * textSize, y + 3 * textSize, SSD1306_WHITE);
+          display.drawPixel(x + 7 * textSize, y + 3 * textSize, SSD1306_WHITE);
+        }
+      }
+      break;
+    }
+    case EMOJI_ANIM_DIAMOND: {
+      display.setCursor(x, y);
+      display.print((char)0x04);
+      float p = fmodf(progress * 4.0f, 1.0f);
+      if (p < 0.2f) {
+        display.drawPixel(x - 2 * textSize, y - 2 * textSize, SSD1306_WHITE);
+        display.drawPixel(x + 7 * textSize, y - 2 * textSize, SSD1306_WHITE);
+        display.drawPixel(x - 2 * textSize, y + 6 * textSize, SSD1306_WHITE);
+        display.drawPixel(x + 7 * textSize, y + 6 * textSize, SSD1306_WHITE);
+      }
+      break;
+    }
+    case EMOJI_ANIM_NOTES: {
+      // Cycles single<->double note with a 1px bob - the closest a fixed
+      // character cell can get to "spinning."
+      float p = fmodf(progress * 5.0f, 1.0f);
+      char g = (p < 0.5f) ? (char)0x0D : (char)0x0E;
+      int yOff = (p < 0.25f || (p >= 0.5f && p < 0.75f)) ? 0 : -1 * (int)textSize;
+      display.setCursor(x, y + yOff);
+      display.print(g);
+      break;
+    }
+    case EMOJI_ANIM_SNOWFLAKE: {
+      // No true rotation available for a fixed glyph, so "spin" is
+      // simulated by orbiting the dot around its base position through
+      // 4 sub-positions per cycle.
+      float p = fmodf(progress * 3.0f, 1.0f);
+      int step = (int)(p * 4.0f) % 4;
+      static const int8_t ox[4] = { 0, 1, 0, -1 };
+      static const int8_t oy[4] = { -1, 0, 1, 0 };
+      display.setCursor(x + ox[step] * (int)textSize, y + oy[step] * (int)textSize);
+      display.print((char)0x07);
+      break;
+    }
+    default:
+      break;
+  }
+  display.setTextSize(1);
+}
+
 // Generalized version of printCentered with per-axis alignment, used only
 // by drawBounce() (the ANIM_BOUNCE / custom-card layout) - every other
 // animation below calls printCentered/printLeftAligned directly with its
 // own hand-tuned bounds, since a user-editable layout doesn't make sense
-// on a fixed hand-drawn animation.
+// on a fixed hand-drawn animation. Draws character-by-character (rather
+// than one display.print(lineBuf) call per line) so animated emoji
+// glyphs can be swapped out for drawAnimatedGlyph() at the exact position
+// they'd otherwise print at - relies on the default font's fixed 6px
+// (at size 1) advance per character to compute those positions without
+// needing a getTextBounds() call per character.
 static void printAligned(const char* text, TextAlignH alignH, TextAlignV alignV,
-                          int xLeft, int xRight, int yTop, int yBottom, int lineHeight) {
+                          int xLeft, int xRight, int yTop, int yBottom, int lineHeight,
+                          bool animating, float progress, uint8_t animDisableMask) {
   int numLines = 1;
   for (const char* p = text; *p; p++) {
     if (*p == '\n') numLines++;
@@ -91,25 +181,35 @@ static void printAligned(const char* text, TextAlignH alignH, TextAlignV alignV,
     memcpy(lineBuf, lineStart, copyLen);
     lineBuf[copyLen] = '\0';
 
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(lineBuf, 0, y, &x1, &y1, &w, &h);
+
     int x;
     if (alignH == ALIGN_H_LEFT) {
       x = xLeft;
     } else if (alignH == ALIGN_H_RIGHT) {
-      int16_t x1, y1;
-      uint16_t w, h;
-      display.getTextBounds(lineBuf, 0, y, &x1, &y1, &w, &h);
       x = xRight - (int)w;
       if (x < xLeft) x = xLeft;
     } else {
-      int16_t x1, y1;
-      uint16_t w, h;
-      display.getTextBounds(lineBuf, 0, y, &x1, &y1, &w, &h);
       x = xLeft + ((xRight - xLeft) - (int)w) / 2;
       if (x < xLeft) x = xLeft;
     }
 
-    display.setCursor(x, y);
-    display.print(lineBuf);
+    int cx = x;
+    for (int i = 0; i < copyLen; i++) {
+      char c = lineBuf[i];
+      EmojiAnimFamily family = glyphToEmojiAnimFamily(c);
+      bool animateThis = animating && family != EMOJI_ANIM_NONE &&
+                          !(animDisableMask & (1 << family));
+      if (animateThis) {
+        drawAnimatedGlyph(family, cx, y, progress, 1);
+      } else {
+        display.setCursor(cx, y);
+        display.print(c);
+      }
+      cx += 6;
+    }
 
     y += lineHeight;
     if (!nl) break;
@@ -122,16 +222,23 @@ static void printAligned(const char* text, TextAlignH alignH, TextAlignV alignV,
 // Drawn at 2x text size (Adafruit_GFX only offers integer multiples) -
 // at the default size these single CP437 glyphs are ~5x7px and read as
 // little more than a dot on a 128x64 screen.
-static void drawCornerEmoji(const char cornerEmoji[4]) {
+static void drawCornerEmoji(const char cornerEmoji[4], bool animating, float progress, uint8_t animDisableMask) {
   static const int cx[4] = { 3, OLED_WIDTH - 15, 3, OLED_WIDTH - 15 };
   static const int cy[4] = { 3, 3, OLED_HEIGHT - 17, OLED_HEIGHT - 17 };
-  display.setTextSize(2);
   for (int i = 0; i < 4; i++) {
     if (cornerEmoji[i] == 0) continue;
-    display.setCursor(cx[i], cy[i]);
-    display.print(cornerEmoji[i]);
+    EmojiAnimFamily family = glyphToEmojiAnimFamily(cornerEmoji[i]);
+    bool animateThis = animating && family != EMOJI_ANIM_NONE &&
+                        !(animDisableMask & (1 << family));
+    if (animateThis) {
+      drawAnimatedGlyph(family, cx[i], cy[i], progress, 2);
+    } else {
+      display.setTextSize(2);
+      display.setCursor(cx[i], cy[i]);
+      display.print(cornerEmoji[i]);
+      display.setTextSize(1);
+    }
   }
-  display.setTextSize(1);
 }
 
 // Same as printCentered but left-aligned at a fixed x - used for cards
@@ -870,12 +977,17 @@ static void drawEqualizer(const Card& card, bool animating, float progress) {
 }
 
 static void drawBounce(const Card& card, bool animating, float progress) {
-  printAligned(card.text, card.alignH, card.alignV, 4, OLED_WIDTH - 4, 0, OLED_HEIGHT, 9);
+  printAligned(card.text, card.alignH, card.alignV, 4, OLED_WIDTH - 4, 0, OLED_HEIGHT, 9,
+               animating, progress, card.animatedEmojiDisableMask);
   if (animating) {
-    const int topY = 20, bottomY = OLED_HEIGHT - 12;
-    float wave = 1.0f - fabsf(2.0f * progress - 1.0f);
-    int bounceY = topY + (int)(wave * (bottomY - topY));
-    display.fillCircle(6, bounceY, 3, SSD1306_WHITE);
+    // Border-flash: a ring inset from the permanent frame blinks on/off -
+    // this layout's "something is happening" cue. The permanent outer
+    // frame (drawn by drawCardFrame() after this returns) stays solid
+    // throughout, so this reads as a second ring flashing just inside it.
+    float phase = fmodf(progress * 6.0f, 1.0f);
+    if (phase < 0.5f) {
+      display.drawRect(2, 2, OLED_WIDTH - 4, OLED_HEIGHT - 4, SSD1306_WHITE);
+    }
   }
 }
 
@@ -922,7 +1034,7 @@ static void drawCardFrame(int index, bool animating, float progress) {
     display.drawBitmap(x, y, card.bitmap, card.bmpW, card.bmpH, SSD1306_WHITE);
   }
 
-  drawCornerEmoji(card.cornerEmoji);
+  drawCornerEmoji(card.cornerEmoji, animating, progress, card.animatedEmojiDisableMask);
 
   display.display();
 }
@@ -1067,4 +1179,30 @@ void showWifiSetupPrompt(const char* apName) {
 
   display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
   display.display();
+}
+
+void showWifiConnected(const char* ip) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  char msg[64];
+  snprintf(msg, sizeof(msg), "WiFi connected!\n\n%s", ip);
+  printCentered(msg, 4, OLED_HEIGHT - 4, 9);
+
+  display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
+  display.display();
+  delay(2000);
+}
+
+void showWifiFailed() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  printCentered("WiFi setup failed\n\nContinuing\noffline", 4, OLED_HEIGHT - 4, 9);
+
+  display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
+  display.display();
+  delay(2000);
 }

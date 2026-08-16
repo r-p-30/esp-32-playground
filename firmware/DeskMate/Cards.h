@@ -36,6 +36,22 @@ enum CardAnimation : uint8_t {
 enum TextAlignH : uint8_t { ALIGN_H_CENTER = 0, ALIGN_H_LEFT, ALIGN_H_RIGHT };
 enum TextAlignV : uint8_t { ALIGN_V_MIDDLE = 0, ALIGN_V_TOP, ALIGN_V_BOTTOM };
 
+// Each emoji shortcode belongs to one of these "families" for animation
+// purposes - smile/smileb share one (they're the two faces of the same
+// wink/grin cycle) and so do note/notes (single note <-> double note is
+// the "spin"), so there are 5 toggles rather than 7. See
+// glyphToEmojiAnimFamily() and drawBounce()/drawCornerEmoji() in
+// DisplayUI.cpp for what each one actually looks like.
+enum EmojiAnimFamily : uint8_t {
+  EMOJI_ANIM_HEART = 0,
+  EMOJI_ANIM_SMILE = 1,
+  EMOJI_ANIM_SPARKLE = 2,
+  EMOJI_ANIM_DIAMOND = 3,
+  EMOJI_ANIM_NOTES = 4,
+  EMOJI_ANIM_SNOWFLAKE = 5,
+  EMOJI_ANIM_NONE = 255,
+};
+
 struct Card {
   char text[CARD_TEXT_LEN];  // mutable - remote updates write directly here
   const uint8_t* bitmap;     // nullptr if this card has no icon bitmap
@@ -52,6 +68,14 @@ struct Card {
   TextAlignH alignH;
   TextAlignV alignV;
   char cornerEmoji[4];  // CP437 byte per corner: TL, TR, BL, BR. 0 = none.
+
+  // Bit i set (1 << EmojiAnimFamily i) = that family's default animation
+  // is turned OFF for this card. Deliberately a "disable" mask, not an
+  // "enable" one - zero-init (every existing card initializer, and a
+  // freshly-populated reserved slot) then means "everything animates by
+  // default," matching the site's per-card opt-*out* toggles rather than
+  // needing every card to explicitly opt in.
+  uint8_t animatedEmojiDisableMask;
 };
 
 extern Card cards[];
@@ -93,6 +117,14 @@ char emojiShortcodeToGlyph(const char* code);
 // for 0/unrecognized). Used when reporting current card state back to the
 // site (see sendCardsReport() in RemoteControl.cpp).
 const char* glyphToEmojiShortcode(char glyph);
+
+// Which animation family (if any) a glyph belongs to - EMOJI_ANIM_NONE
+// for glyph 0 or anything not in the animatable set.
+EmojiAnimFamily glyphToEmojiAnimFamily(char glyph);
+
+// Sets which emoji animation families are disabled for this card - see
+// Card::animatedEmojiDisableMask.
+void setCardAnimatedEmojiDisableMask(int index, uint8_t disableMask);
 
 // Walks from `from` in `direction` (+1 or -1), wrapping around, and
 // returns the index of the next visible card - used so browsing with the

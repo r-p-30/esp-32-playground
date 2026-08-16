@@ -4,10 +4,14 @@
 // WifiCredentials.h is gitignored - it never gets committed.
 // A phone hotspot SSID/password works identically to a home router here.
 
+// Optional - tried right after the NVS fast path and before the setup
+// portal broadcasts (connectWiFiAtBootWithSetupFallback() in WifiUtil.cpp).
+// Leave both as "" to skip straight to the portal. Fill these in to bypass
+// WiFiManager's captive-portal flow entirely on your own bench/dev network.
+#define WIFI_SSID       ""
+#define WIFI_PASSWORD   ""
+
 // Name/password for the temporary setup portal AP (WifiUtil.cpp) - this is
-// how the device joins WiFi the first time (or any time the last-connected
-// network stops working). No separate WIFI_SSID/WIFI_PASSWORD needed here -
-// the boot fast path just reconnects with whatever's already stored in NVS
-// from a past successful connect (see connectWiFiAtBootWithSetupFallback()).
+// how the device joins WiFi if the fast paths above don't work.
 #define WIFI_SETUP_AP_NAME      "YOUR_SETUP_AP_NAME"
 #define WIFI_SETUP_AP_PASSWORD  "YOUR_SETUP_AP_PASSWORD"
