@@ -43,9 +43,10 @@ struct GameSnapshot {
 // Resets to a fresh run: GAME_COUNTDOWN state, dino grounded, no cacti,
 // score 0, lives back to GAME_LIVES. Does NOT touch the best-score
 // high-water mark - that persists in RAM across runs (and across mode
-// switches) until the device reboots or gets reflashed; there's no
-// flash/EEPROM persistence, by design. Called on entering game mode
-// (long-press or remote toggle-on).
+// switches), and now in NVS flash (HighScores.h) too, so it survives a
+// reboot/reflash - loaded lazily on first call, see GameEngine.cpp's
+// bestScoreLoaded. Called on entering game mode (long-press or remote
+// toggle-on).
 void initGame();
 
 // Alias for initGame() - used when a short press on the game-over screen

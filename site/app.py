@@ -41,6 +41,18 @@ EMOJI_FAMILIES = [
 ]
 BORDER_FLASH_DISABLE_BIT = 6
 
+# Mirrors GAMES[] in firmware/DeskMate/Games.cpp (index order = Game.h's
+# GameId enum) - kept in manual sync here rather than round-tripped from
+# the device, same reasoning/precedent as EMOJI_FAMILIES above. Check
+# Games.cpp directly if this ever drifts (a game gets added/reordered/
+# implemented).
+GAMES = [
+    {"index": 0, "name": "Dino Jump", "implemented": True},
+    {"index": 1, "name": "Whack-a-mole", "implemented": True},
+    {"index": 2, "name": "Snake", "implemented": False},
+    {"index": 3, "name": "Tetris", "implemented": False},
+]
+
 
 def all_emoji_families(card):
     """Every family, annotated with whether it's currently present in this
@@ -93,15 +105,33 @@ _device_ws_lock = threading.Lock()
 
 
 def _push_state_to_device():
+    """Returns True if the update actually reached a live device connection
+    right now, False otherwise (not connected, or the send failed). Callers
+    use this to word their flash message honestly - state.apply_update()
+    always persists the change regardless, so it's never lost (the device
+    picks it up on its next connect - see docs/remote-api-spec.md), but a
+    dashboard action shouldn't claim "Buzzed the device" when nothing was
+    actually delivered yet."""
     global _device_ws
     with _device_ws_lock:
         ws = _device_ws
         if ws is None:
-            return
+            return False
         try:
             ws.send(_device_state_json())
+            return True
         except Exception:
             _device_ws = None
+            return False
+
+
+def _push_and_flash(delivered_message, queued_message):
+    """Pushes the just-applied state and flashes one of two messages
+    depending on whether a connected device actually received it right now
+    - see _push_state_to_device()'s docstring for why this distinction
+    matters."""
+    delivered = _push_state_to_device()
+    flash(delivered_message if delivered else queued_message, "success")
 
 
 @sock.route("/ws/device")
@@ -210,6 +240,7 @@ def dashboard():
         cards=all_cards,
         edit_index=edit_index,
         custom_card_index=state.CUSTOM_CARD_INDEX,
+        games=GAMES,
         emoji_families=all_emoji_families(all_cards[edit_index]),
         border_flash_checked=not (all_cards[edit_index].get("animatedEmojiDisableMask", 0) & (1 << BORDER_FLASH_DISABLE_BIT)),
     )
@@ -240,8 +271,7 @@ def dashboard_status():
 @login_required
 def action_buzz():
     state.apply_update({"buzz": True})
-    _push_state_to_device()
-    flash("Buzzed the device.", "success")
+    _push_and_flash("Buzzed the device.", "Buzz queued - device is offline, will fire when it reconnects.")
     return redirect(url_for("dashboard"))
 
 
@@ -249,8 +279,8 @@ def action_buzz():
 @login_required
 def action_animation():
     state.apply_update({"triggerAnimation": True})
-    _push_state_to_device()
-    flash("Played the current card's animation.", "success")
+    _push_and_flash("Played the current card's animation.",
+                     "Animation queued - device is offline, will play when it reconnects.")
     return redirect(url_for("dashboard"))
 
 
@@ -258,8 +288,7 @@ def action_animation():
 @login_required
 def action_identify():
     state.apply_update({"identifyPing": True})
-    _push_state_to_device()
-    flash("Sent identify ping.", "success")
+    _push_and_flash("Sent identify ping.", "Identify ping queued - device is offline, will fire when it reconnects.")
     return redirect(url_for("dashboard"))
 
 
@@ -269,8 +298,8 @@ def action_carousel():
     enabled = request.form.get("enabled") == "on"
     interval = int(request.form.get("intervalSec") or 8)
     state.apply_update({"carouselEnabled": enabled, "carouselIntervalSec": interval})
-    _push_state_to_device()
-    flash("Carousel settings saved.", "success")
+    _push_and_flash("Carousel settings saved.",
+                     "Carousel settings saved - device is offline, will apply when it reconnects.")
     return redirect(url_for("dashboard"))
 
 
@@ -279,8 +308,9 @@ def action_carousel():
 def action_night_mode():
     enabled = request.form.get("enabled") == "on"
     state.apply_update({"nightModeEnabled": enabled})
-    _push_state_to_device()
-    flash(f"Night mode {'on' if enabled else 'off'} sent.", "success")
+    on_off = "on" if enabled else "off"
+    _push_and_flash(f"Night mode {on_off} sent.",
+                     f"Night mode {on_off} queued - device is offline, will apply when it reconnects.")
     return redirect(url_for("dashboard"))
 
 
@@ -289,8 +319,24 @@ def action_night_mode():
 def action_game_mode():
     enabled = request.form.get("enabled") == "on"
     state.apply_update({"gameModeEnabled": enabled})
-    _push_state_to_device()
-    flash(f"Game mode {'on' if enabled else 'off'} sent.", "success")
+    on_off = "on" if enabled else "off"
+    _push_and_flash(f"Game mode {on_off} sent.",
+                     f"Game mode {on_off} queued - device is offline, will apply when it reconnects.")
+    return redirect(url_for("dashboard"))
+
+
+@app.post("/dashboard/game-select")
+@login_required
+def action_game_select():
+    idx = request.form.get("game", type=int)
+    game = next((g for g in GAMES if g["index"] == idx), None)
+    if game is None or not game["implemented"]:
+        flash("Not a playable game.", "error")
+        return redirect(url_for("dashboard"))
+
+    state.apply_update({"gameModeEnabled": True, "activeGame": idx})
+    _push_and_flash(f"Launched {game['name']}.",
+                     f"{game['name']} queued - device is offline, will launch when it reconnects.")
     return redirect(url_for("dashboard"))
 
 
@@ -354,8 +400,9 @@ def card_save(index):
     state.set_card_layout(index, align_h, align_v, corner_emoji)
     state.set_card_animated_emoji_mask(index, disable_mask)
     state.set_card_animation_duration(index, duration_ms)
-    _push_state_to_device()
-    flash(f"Card {index} saved{' and made active.' if make_active else '.'}", "success")
+    active_suffix = " and made active" if make_active else ""
+    _push_and_flash(f"Card {index} saved{active_suffix}.",
+                     f"Card {index} saved{active_suffix} - device is offline, will apply when it reconnects.")
     return redirect(url_for("dashboard", edit=index))
 
 

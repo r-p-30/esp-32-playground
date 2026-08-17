@@ -50,6 +50,28 @@
       </div>
     </form>
 
+    {# heartbeat.activeGame/gameMode is the device's own current truth (see
+       docs/remote-api-spec.md's heartbeat section) - used to highlight
+       which game is actually playing right now, as opposed to
+       state.gameModeEnabled which only reflects the last thing this site
+       sent. Picking a game here works the same whether game mode is
+       currently off (starts it) or already on (swaps the active game) -
+       see action_game_select() in app.py. #}
+    <p class="hint">Play a game</p>
+    <div class="button-row">
+      {% for g in games %}
+      <form method="post" action="{{ url_for('action_game_select') }}">
+        <input type="hidden" name="game" value="{{ g.index }}">
+        <button type="submit"
+                class="game-picker-btn{% if heartbeat and heartbeat.gameMode and heartbeat.activeGame == g.index %} active{% endif %}{% if not g.implemented %} disabled{% endif %}"
+                data-game-index="{{ g.index }}"
+                {% if not g.implemented %}disabled title="Not built yet"{% endif %}>
+          {{ g.name }}{% if not g.implemented %} <span class="hint">(soon)</span>{% endif %}
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+
     <h2>Carousel</h2>
     <form method="post" action="{{ url_for('action_carousel') }}" class="stack-form">
       <div class="toggle-row">
@@ -166,7 +188,9 @@
     <h2>Live preview</h2>
     <p class="hint">Approximate - actual OLED font/spacing may differ slightly. Animation preview only simulates the default "bounce" layout.</p>
     <div class="preview-canvas-wrap">
-      <canvas id="preview-canvas" width="512" height="256"></canvas>
+      <div class="device-frame">
+        <canvas id="preview-canvas" width="512" height="256"></canvas>
+      </div>
       <button type="button" onclick="previewAnimation()">&#9654; Preview animation</button>
     </div>
   </section>

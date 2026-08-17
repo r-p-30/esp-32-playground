@@ -25,14 +25,15 @@ struct WhackSnapshot {
   int cursorPos;        // 0..MOLE_POSITIONS-1 (Config.h), player's aimed hole
   int molePos;           // 0..MOLE_POSITIONS-1, -1 during countdown (no mole yet)
   int score;              // hits this run
-  int bestScore;           // highest score seen since boot, same persistence as Dino's
+  int bestScore;           // all-time high, persisted to NVS flash - see HighScores.h
   int misses;               // timed-out moles this run, 0..MOLE_MAX_MISSES (Config.h)
 };
 
 // Resets to a fresh run: WHACK_COUNTDOWN state, cursor back to hole 0,
 // score/misses back to 0. Does NOT touch bestScore - persists in RAM
-// across runs (and across mode switches) until reboot/reflash, same as
-// Dino's initGame(). Called on entering game mode.
+// across runs (and across mode switches), and in NVS flash (HighScores.h)
+// across reboots/reflashes too, same as Dino's initGame(). Called on
+// entering game mode.
 void initMoleGame();
 
 // Alias for initMoleGame() - used when a short press on the game-over

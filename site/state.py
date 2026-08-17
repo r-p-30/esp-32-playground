@@ -25,6 +25,7 @@ NUM_CARDS = len(SEED_CARDS)
 # Fields the device only acts on when `revision` is new (docs/remote-api-spec.md).
 ONE_SHOT_NEUTRAL = {
     "showCard": None,
+    "activeGame": None,
     "cardTextIndex": None,
     "cardText": None,
     "cardTextAlignH": None,

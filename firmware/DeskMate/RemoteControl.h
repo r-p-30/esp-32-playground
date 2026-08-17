@@ -15,13 +15,24 @@ void beginRemoteControl();
 // reconnects) and sends a small periodic heartbeat over the same socket
 // so the site can show "last seen" (REMOTE_HEARTBEAT_INTERVAL_MS in
 // Config.h). Cheap and non-blocking - call every loop() iteration
-// regardless of WiFi state.
-void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode);
+// regardless of WiFi state. activeGame is whatever GAMES[] index is
+// currently selected (Game.h) - reported so the site can highlight which
+// game is playing right now, same reasoning as currentCard for cards.
+void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode, int activeGame);
 
 // Returns the card index to jump to if a new remote update arrived since
 // the last call, otherwise -1. Each pending jump is returned exactly once,
 // then cleared - it's a one-time nudge, not a lock on the knob.
 int consumeRemoteCardJump();
+
+// Returns the GAMES[] index (Game.h) to jump straight into if a new remote
+// update requested one, otherwise -1 - same one-time-nudge shape as
+// consumeRemoteCardJump() above, but for games["activeGame"] instead of
+// showCard. Unlike consumeRemoteGameModeChange() below, this launches a
+// specific game directly rather than just opening the picker menu, and
+// fires on every new selection regardless of whether game mode was already
+// on - that's what lets the site swap the active game mid-run.
+int consumeRemoteGameSelect();
 
 // Returns the index of a card whose content (text/alignment/corner
 // emoji/animation mask) was just updated by a remote push, otherwise -1.

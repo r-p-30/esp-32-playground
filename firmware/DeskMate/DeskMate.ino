@@ -240,8 +240,11 @@ void loop() {
   // gameMode reported to the site covers both the picker menu and an
   // actual game in progress - from the site's side "Game mode" just means
   // "off the card browser", same as what the local long-press now opens
-  // into (the menu) rather than jumping straight into Dino.
-  loopRemoteControl(currentCard, nightModeActive, mode != MODE_CARDS);
+  // into (the menu) rather than jumping straight into Dino. selectedGame
+  // is reported regardless of mode (harmless while in cards - the site
+  // only reads it when gameMode is also true), same as currentCard always
+  // being reported even in night mode.
+  loopRemoteControl(currentCard, nightModeActive, mode != MODE_CARDS, selectedGame);
 
   // Edge-triggered on the site's stored value actually changing, so a
   // local button toggle isn't immediately re-fought by an unchanged
@@ -257,6 +260,22 @@ void loop() {
     } else {
       exitGameModeToCards();
     }
+  }
+
+  // A specific game picked from the site's game list - jumps straight into
+  // it (skipping the picker menu), and fires on every new selection
+  // regardless of whether game mode was already on, so this also covers
+  // "swap the active game while one's already running." Same implemented-
+  // only guard as enterSelectedGame() (a stub selection from the site is a
+  // no-op, not a launch into a blank screen).
+  int remoteGameSelect = consumeRemoteGameSelect();
+  if (remoteGameSelect >= 0 && remoteGameSelect < GAME_COUNT &&
+      GAMES[remoteGameSelect].implemented && !nightModeActive) {
+    mode = MODE_GAME;
+    selectedGame = remoteGameSelect;
+    GAMES[selectedGame].enter();
+    playChime();
+    forceHeartbeatNow();
   }
 
   int remoteJump = consumeRemoteCardJump();

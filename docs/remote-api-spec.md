@@ -65,6 +65,25 @@ Fields split into two groups that behave differently:
   card index once and plays the normal card-change beep (same sound as
   turning the knob). You can freely turn the knob again right
   after — this is a one-time nudge, not a lock.
+- **`activeGame`** (number, optional) — if present, the device jumps
+  straight into that game (index into the list below) and plays the
+  mode-change chime, same one-time-nudge shape as `showCard` above.
+  Ignored while night mode is active, and a no-op if the index points at a
+  game that isn't implemented yet. Unlike `gameModeEnabled` below, this
+  fires on *every* new value regardless of whether game mode was already
+  on — that's what lets a dashboard swap the active game while one's
+  already running, not just launch the first one from cards. Combine with
+  `gameModeEnabled: true` in the same push so the site's own persisted
+  toggle state stays honest too. Game indices (`Game.h`'s `GameId` enum,
+  `GAMES[]` in `Games.cpp` — check that file directly if this drifts):
+
+  | Index | Game | Implemented |
+  |---|---|---|
+  | 0 | Dino Jump | yes |
+  | 1 | Whack-a-mole | yes |
+  | 2 | Snake | not yet |
+  | 3 | Tetris | not yet |
+
 - **`cardTextIndex`** + **`cardText`** (number + string, optional, sent as
   a pair) — overwrites the text of the card at that index. There are 23
   cards total (index 0-22). **Index 20 is the reserved empty slot**
@@ -259,7 +278,7 @@ every `REMOTE_HEARTBEAT_INTERVAL_MS` (default 30s, `Config.h`) as a text
 frame:
 
 ```json
-{"currentCard":0,"nightMode":false,"gameMode":false,"uptimeSec":184320}
+{"currentCard":0,"nightMode":false,"gameMode":false,"activeGame":1,"uptimeSec":184320}
 ```
 
 - `currentCard` — index of whatever's currently showing.
@@ -267,6 +286,11 @@ frame:
   what's actually active on the device right now (as opposed to
   `nightModeEnabled`/`gameModeEnabled` above, which only reflect the last
   thing *you* sent, not the current truth — see the note on those fields).
+- `activeGame` — whichever game index (see `activeGame` above) is
+  currently selected, so a dashboard can highlight it. Only meaningful
+  while `gameMode` is true; it holds the last-selected game the rest of
+  the time (harmless, same "doesn't reset on mode switch" behavior as the
+  device's own `selectedGame` in `DeskMate.ino`).
 - `uptimeSec` — seconds since last boot (resets to a small number if the
   device loses power/resets).
 

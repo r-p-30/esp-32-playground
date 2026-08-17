@@ -15,6 +15,7 @@ static unsigned long lastHeartbeatSentMs = 0;
 static long lastAppliedRevision = -1;
 
 static int pendingCardJump = -1;
+static int pendingGameSelect = -1;
 static int pendingContentUpdateIndex = -1;
 static bool pendingBuzz = false;
 static bool pendingAnimationTrigger = false;
@@ -151,6 +152,14 @@ static void applyStateJson(const uint8_t* payload, size_t length) {
     if (!doc["showCard"].isNull()) {
       pendingCardJump = doc["showCard"].as<int>();
     }
+    if (!doc["activeGame"].isNull()) {
+      // Same one-time-nudge semantics as showCard above, but jumps
+      // straight into a specific game (Game.h's GameId index) instead of
+      // just opening the on-device picker menu - lets the site both start
+      // a game from cards mode and swap the active game while one's
+      // already running, without the physical knob's menu-first flow.
+      pendingGameSelect = doc["activeGame"].as<int>();
+    }
     if (doc["buzz"] | false) {
       pendingBuzz = true;
     }
@@ -248,7 +257,7 @@ void beginRemoteControl() {
   wsStarted = true;
 }
 
-static void sendHeartbeatIfDue(int currentCard, bool nightModeActive, bool inGameMode) {
+static void sendHeartbeatIfDue(int currentCard, bool nightModeActive, bool inGameMode, int activeGame) {
   if (!wsStarted || !webSocket.isConnected()) return;
 
   unsigned long now = millis();
@@ -257,20 +266,21 @@ static void sendHeartbeatIfDue(int currentCard, bool nightModeActive, bool inGam
   }
   lastHeartbeatSentMs = now;
 
-  char body[128];
+  char body[144];
   snprintf(body, sizeof(body),
-           "{\"currentCard\":%d,\"nightMode\":%s,\"gameMode\":%s,\"uptimeSec\":%lu}",
+           "{\"currentCard\":%d,\"nightMode\":%s,\"gameMode\":%s,\"activeGame\":%d,\"uptimeSec\":%lu}",
            currentCard,
            nightModeActive ? "true" : "false",
            inGameMode ? "true" : "false",
+           activeGame,
            millis() / 1000UL);
   webSocket.sendTXT(body);
 }
 
-void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode) {
+void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode, int activeGame) {
   if (!wsStarted) return;
   webSocket.loop();
-  sendHeartbeatIfDue(currentCard, nightModeActive, inGameMode);
+  sendHeartbeatIfDue(currentCard, nightModeActive, inGameMode, activeGame);
 }
 
 void forceHeartbeatNow() {
@@ -285,6 +295,12 @@ int consumeRemoteCardJump() {
   int jump = pendingCardJump;
   pendingCardJump = -1;
   return jump;
+}
+
+int consumeRemoteGameSelect() {
+  int idx = pendingGameSelect;
+  pendingGameSelect = -1;
+  return idx;
 }
 
 int consumeRemoteContentUpdate() {

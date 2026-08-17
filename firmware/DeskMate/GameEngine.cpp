@@ -2,6 +2,11 @@
 #include <math.h>
 #include "GameEngine.h"
 #include "Config.h"
+#include "HighScores.h"
+
+// NVS key for this game's persisted best score (HighScores.h) - <=15
+// chars, unique per game.
+#define HIGHSCORE_KEY "dino"
 
 // Dino hitbox - a simplified bounding box around the small sprite
 // DisplayUI.cpp draws (excludes the decorative tail spike, same reasoning
@@ -51,8 +56,21 @@ static float distanceUntilNextSpawn = 0;
 static float scoreAccumPx = 0;
 static int score = 0;
 // Deliberately NOT reset by resetCommon() - persists across runs/restarts
-// until reboot or reflash, per docs/desk-mate-project-plan.md.
+// in RAM, and now in NVS flash too (HighScores.h), so it survives a
+// reboot/reflash as well - see bestScoreLoaded below for the load side,
+// and stepGame()'s fatal-hit branch for the save side.
 static int bestScore = 0;
+// True once bestScore has been loaded from flash this boot - lazy rather
+// than a global-constructor load, since NVS isn't ready that early. Set on
+// the very first resetCommon() call (initGame(), on entering game mode)
+// and never again.
+static bool bestScoreLoaded = false;
+// Snapshot of bestScore at the start of the current run - stepGame() only
+// writes to flash if this run's bestScore ends up higher than this, so a
+// run that doesn't beat the record costs zero flash writes, and one that
+// does costs exactly one (at the moment it ends), not one per frame the
+// live score ticks past the old record.
+static int bestScoreAtRunStart = 0;
 
 static unsigned long lastStepMs = 0;
 
@@ -61,6 +79,12 @@ static float randomSpawnGap() {
 }
 
 static void resetCommon() {
+  if (!bestScoreLoaded) {
+    bestScoreLoaded = true;
+    bestScore = loadHighScore(HIGHSCORE_KEY);
+  }
+  bestScoreAtRunStart = bestScore;
+
   runState = GAME_COUNTDOWN;
   countdownStartMs = millis();
   countdownValue = 2;
@@ -213,6 +237,11 @@ void stepGame() {
       if (lives <= 0) {
         runState = GAME_OVER_FLASH;
         gameOverFlashStartMs = now;
+        // Persist once per run, only if this run actually beat the
+        // previous record - see bestScoreAtRunStart's comment above.
+        if (bestScore > bestScoreAtRunStart) {
+          saveHighScore(HIGHSCORE_KEY, bestScore);
+        }
       }
       // else: non-fatal miss - run keeps going. Games.cpp's dinoStep()
       // notices the lives drop (via the snapshot) and plays a sound - this

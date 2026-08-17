@@ -37,6 +37,20 @@
     el.checked = !!value;
   }
 
+  // Highlights whichever game button matches the device's own reported
+  // truth (heartbeat.activeGame while heartbeat.gameMode is true) - same
+  // "current truth, not last-sent value" reasoning as setToggle() above,
+  // but for the game picker's .active class instead of a checkbox.
+  function setActiveGame(hb) {
+    var activeIndex = hb && hb.gameMode ? hb.activeGame : -1;
+    var buttons = document.querySelectorAll('.game-picker-btn[data-game-index]');
+    for (var i = 0; i < buttons.length; i++) {
+      var btn = buttons[i];
+      var isActive = Number(btn.getAttribute('data-game-index')) === activeIndex;
+      btn.classList.toggle('active', isActive);
+    }
+  }
+
   function poll() {
     fetch('/dashboard/status', { headers: { Accept: 'application/json' } })
       .then(function (res) { return res.ok ? res.json() : null; })
@@ -46,6 +60,7 @@
         setHint(data);
         setToggle('night-mode-checkbox', data.nightModeEnabled);
         setToggle('game-mode-checkbox', data.gameModeEnabled);
+        setActiveGame(data.heartbeat);
       })
       .catch(function () {});
   }

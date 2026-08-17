@@ -1,6 +1,11 @@
 #include <Arduino.h>
 #include "WhackEngine.h"
 #include "Config.h"
+#include "HighScores.h"
+
+// NVS key for this game's persisted best score (HighScores.h) - <=15
+// chars, unique per game.
+#define HIGHSCORE_KEY "whack"
 
 static WhackRunState runState = WHACK_COUNTDOWN;
 static unsigned long countdownStartMs = 0;
@@ -12,8 +17,12 @@ static unsigned long moleSpawnMs = 0;
 
 static int score = 0;
 // Deliberately NOT reset by resetCommon() - persists across runs/restarts
-// until reboot or reflash, same as GameEngine.cpp's bestScore.
+// in RAM, and now in NVS flash too (HighScores.h), same as
+// GameEngine.cpp's bestScore - see bestScoreLoaded/bestScoreAtRunStart
+// below for the load/save mechanics.
 static int bestScore = 0;
+static bool bestScoreLoaded = false;
+static int bestScoreAtRunStart = 0;
 static int misses = 0;
 
 static unsigned long gameOverFlashStartMs = 0;
@@ -43,6 +52,12 @@ static int randomMolePos(int excludePos) {
 }
 
 static void resetCommon() {
+  if (!bestScoreLoaded) {
+    bestScoreLoaded = true;
+    bestScore = loadHighScore(HIGHSCORE_KEY);
+  }
+  bestScoreAtRunStart = bestScore;
+
   runState = WHACK_COUNTDOWN;
   countdownStartMs = millis();
   countdownValue = 2;
@@ -125,6 +140,11 @@ void stepMoleGame() {
       molePos = -1;
       runState = WHACK_OVER_FLASH;
       gameOverFlashStartMs = now;
+      // Persist once per run, only if this run actually beat the previous
+      // record - same reasoning as GameEngine.cpp's fatal-hit branch.
+      if (bestScore > bestScoreAtRunStart) {
+        saveHighScore(HIGHSCORE_KEY, bestScore);
+      }
     } else {
       molePos = randomMolePos(molePos);
       moleSpawnMs = now;
