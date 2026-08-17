@@ -21,11 +21,6 @@ static bool nightModeActive = false;
 static unsigned long lastWifiCheckMs = 0;
 #define WIFI_RECONNECT_CHECK_MS 10000UL
 
-// Tracks whether the last frame we saw was already game-over, so
-// playGameOver() fires exactly once on the losing hit rather than every
-// loop iteration while the game-over screen sits there waiting for retry.
-static bool gameOverSoundPlayed = false;
-
 // Funnels every card change (manual, remote, or carousel) through one
 // place so the beep and the carousel timer stay consistent regardless of
 // what triggered the change.
@@ -70,7 +65,6 @@ static void enterGameMenu() {
 static void enterSelectedGame() {
   if (!GAMES[selectedGame].implemented) return;
   mode = MODE_GAME;
-  gameOverSoundPlayed = false;
   GAMES[selectedGame].enter();
   playChime();
   forceHeartbeatNow();
@@ -152,17 +146,14 @@ void loop() {
       setNightMode(false);
     }
   } else if (mode == MODE_GAME) {
-    // Short press is whatever the active game's own onShortPress() does
-    // (jump/restart for Dino) - `wasOver` catches the restart case
-    // generically, so gameOverSoundPlayed resets without this file needing
-    // to know that "restart" is a Dino-specific concept. Long or very long
-    // press both back out to the game menu (not straight to cards anymore)
-    // - very long press does NOT enter night mode from here, only card
-    // mode does that.
+    // Short press is entirely whatever the active game's own
+    // onShortPress() does (jump/restart for Dino, including any sound
+    // that goes with it) - this file doesn't need to know what that means
+    // for a given game. Long or very long press both back out to the game
+    // menu (not straight to cards anymore) - very long press does NOT
+    // enter night mode from here, only card mode does that.
     if (ev == ENC_SHORT_PRESS) {
-      bool wasOver = GAMES[selectedGame].isOver();
       GAMES[selectedGame].onShortPress();
-      if (wasOver) gameOverSoundPlayed = false;
     } else if (ev == ENC_LONG_PRESS || ev == ENC_VERY_LONG_PRESS) {
       exitGameToMenu();
     }
@@ -303,13 +294,6 @@ void loop() {
     updateDisplayAnimation();
   } else if (mode == MODE_GAME) {
     GAMES[selectedGame].step();
-    // Fires once on the transition into game-over (not every loop while
-    // that screen sits there waiting for a retry press) - see
-    // gameOverSoundPlayed's declaration above.
-    if (GAMES[selectedGame].isOver() && !gameOverSoundPlayed) {
-      gameOverSoundPlayed = true;
-      playGameOver();
-    }
   }
   // mode == MODE_GAME_MENU: no continuous per-loop redraw - the menu only
   // repaints on ENC_NEXT/ENC_PREV/ENC_SHORT_PRESS (see the switch above),

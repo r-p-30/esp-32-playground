@@ -1293,6 +1293,21 @@ static void drawGameCactus(int cxq, bool big) {
   display.fillRect(cxq + stalkW / 2, GAME_GROUND_Y - stalkH + 6, armW, armH, SSD1306_WHITE);
 }
 
+// Lives readout, mirrored on the score's opposite corner - filled pip per
+// remaining life, hollow outline per life already spent, so the count is
+// visible at a glance without needing numerals to parse mid-run.
+static void drawLivesPips(int lives) {
+  for (int i = 0; i < GAME_LIVES; i++) {
+    int cx = OLED_WIDTH - 6 - i * 8;
+    int cy = 7;
+    if (i < lives) {
+      display.fillCircle(cx, cy, 2, SSD1306_WHITE);
+    } else {
+      display.drawCircle(cx, cy, 2, SSD1306_WHITE);
+    }
+  }
+}
+
 static void drawGameOverScreen(const GameSnapshot& snap) {
   display.clearDisplay();
   display.setTextSize(1);
@@ -1326,6 +1341,7 @@ static void drawGamePlayScene(const GameSnapshot& snap) {
     }
     display.setCursor(4, 4);
     display.print(snap.score);
+    drawLivesPips(snap.lives);
   } else {
     // GAME_COUNTDOWN - dino stands still (see GameEngine.cpp: leg-cycle
     // timer doesn't run until GAME_RUNNING starts), no obstacles yet.
@@ -1339,10 +1355,50 @@ static void drawGamePlayScene(const GameSnapshot& snap) {
   display.display();
 }
 
+// Frozen play-scene with a blinking "GAME OVER" box over it, shown for
+// GAME_OVER_FLASH_DURATION_MS (Config.h) right after the last life is
+// lost, before handing off to drawGameOverScreen()'s resting score card.
+// Duplicates drawGamePlayScene()'s RUNNING-branch draw calls instead of
+// sharing a helper with it - kept fully separate so this new screen can't
+// risk the already-working live gameplay frame.
+static void drawGameOverFlashScene(const GameSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.drawLine(6, GAME_GROUND_Y, OLED_WIDTH - 6, GAME_GROUND_Y, SSD1306_WHITE);
+  int dinoX = GAME_DINO_X + snap.dinoForwardOffsetPx;
+  drawGameDino(dinoX, snap.dinoHeightPx, snap.dinoHeightPx == 0, snap.legFrameA);
+  if (snap.cactus.active) {
+    drawGameCactus((int)snap.cactus.x, snap.cactus.big);
+  }
+  display.setCursor(4, 4);
+  display.print(snap.score);
+  drawLivesPips(snap.lives);
+
+  // Blink by wall-clock parity, not by how long GAME_OVER_FLASH has been
+  // active (GameEngine.cpp owns that timer, not us) - just needs to keep
+  // toggling for as long as this state is showing, which it does since
+  // updateGameFrame() redraws every GAME_FRAME_INTERVAL_MS regardless.
+  bool blinkOn = (millis() / GAME_OVER_FLASH_BLINK_MS) % 2 == 0;
+  if (blinkOn) {
+    const int boxW = 76, boxH = 22;
+    const int boxX = (OLED_WIDTH - boxW) / 2;
+    const int boxY = (OLED_HEIGHT - boxH) / 2;
+    display.fillRect(boxX, boxY, boxW, boxH, SSD1306_BLACK);  // clear whatever world pixels were underneath
+    display.drawRect(boxX, boxY, boxW, boxH, SSD1306_WHITE);
+    printCentered("GAME OVER", boxY, boxY + boxH, 9);
+  }
+
+  display.display();
+}
+
 void showGameFrame() {
   const GameSnapshot& snap = getGameSnapshot();
   if (snap.state == GAME_OVER) {
     drawGameOverScreen(snap);
+  } else if (snap.state == GAME_OVER_FLASH) {
+    drawGameOverFlashScene(snap);
   } else {
     drawGamePlayScene(snap);
   }

@@ -16,6 +16,14 @@ enum GameId {
   GAME_COUNT
 };
 
+// Every game is expected to follow the same lifecycle beat, even though
+// DeskMate.ino stays oblivious to the details behind enter()/step()/
+// onShortPress(): a Ready/Set/Go countdown, then play, then on loss a
+// brief frozen-frame "GAME OVER" flash (blink + a beep, under 2s) before
+// settling on a resting score card that a short press restarts from. See
+// Games.cpp's Dino wrapper (GameEngine.cpp's GAME_COUNTDOWN /
+// GAME_RUNNING / GAME_OVER_FLASH / GAME_OVER states) for the reference
+// implementation of that pattern - keep new games consistent with it.
 struct Game {
   const char* name;
   // false = listed in the menu but not playable yet; selecting it is a
@@ -24,9 +32,8 @@ struct Game {
   bool implemented;
 
   void (*enter)();         // reset to a fresh run and draw the first frame; called once on selecting from the menu
-  void (*step)();          // advance by one tick and redraw; called every loop() while this game is the active one
+  void (*step)();          // advance by one tick and redraw; called every loop() while this game is the active one - also this game's own job to fire its own transition sounds (loss beep, miss blip, ...), see Games.cpp's dinoStep()
   void (*onShortPress)();  // per-game short-press behavior (jump/restart, whack a mole, rotate a piece, ...)
-  bool (*isOver)();        // lets DeskMate.ino fire the game-over sound exactly once, generically
   int (*bestScore)();      // this game's own high-water mark - kept separate per game, not shared
 };
 

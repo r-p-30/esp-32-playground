@@ -21,6 +21,7 @@ void playIdentifyPing();
 // it fires from inside the game's input handling, not a rare one-off.
 void playGameJump();
 
-// Low descending "fail" tone on cactus collision - distinct from every
-// other sound so game over reads unambiguously.
-void playGameOver();
+// Single low blip on a non-fatal hit (lives remaining > 0 after it) -
+// distinct from playGameJump() (higher, jump = good) so a miss reads as
+// negative feedback without needing a screen change to notice it.
+void playGameMiss();

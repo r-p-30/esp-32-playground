@@ -56,10 +56,18 @@
 // clips the tall cactus or floats needlessly high over the short one.
 // Both leave a clear visual gap over the obstacle's height (not just
 // barely exceeding it) - the shrunk dino sprite in DisplayUI.cpp is small
-// enough that even the big-cactus peak (36) stays on-screen, just a couple
-// px shy of the top border.
+// enough that even the big-cactus peak (42) stays on-screen, just a couple
+// px shy of the top border (DisplayUI.cpp's GAME_GROUND_Y sits low enough
+// now - see its own comment - that there's room to spare here).
+// BIG bumped up from 36: height at the moment of overlap is
+// peak * 4*t*(1-t) where t is how far into the 750ms jump you are when the
+// cactus's x crosses the hitbox - only right at t=0.5 do you actually see
+// the peak, so a press that's a beat early/late in the jump (not just a
+// jump that's too short/late relative to the obstacle) saw meaningfully
+// less than 36px of actual clearance, especially for the wider/taller big
+// cactus - a taller peak scales height up at every t, not just the apex.
 #define GAME_JUMP_PEAK_SMALL_PX   28
-#define GAME_JUMP_PEAK_BIG_PX     36
+#define GAME_JUMP_PEAK_BIG_PX     42
 #define GAME_JUMP_FORWARD_PX      14
 #define GAME_SCROLL_SPEED_PX_S    45.0f
 // Grace subtracted from the cactus height a jump needs to clear - a
@@ -67,6 +75,19 @@
 // click, so a jump that's a few px short of the obstacle's literal top
 // still counts as cleared, rather than punishing normal input jitter.
 #define GAME_JUMP_CLEARANCE_FORGIVENESS_PX  6
+
+// A run ends after this many hits, not the first one - see GameEngine.cpp's
+// stepGame() collision handling. A hit that doesn't end the run just
+// dismisses that obstacle (same as scrolling fully off) and play continues.
+#define GAME_LIVES  3
+// Once the last life is lost, GameEngine.cpp holds GAME_OVER_FLASH for this
+// long (frozen play-scene, DisplayUI.cpp blinks a "GAME OVER" box over it)
+// before handing off to the resting GAME_OVER score card - kept under 2s so
+// it reads as a quick beat, not a wait. BLINK_MS is the on/off toggle
+// period within that window (DisplayUI-side, free-running off millis() -
+// doesn't need to know when the flash actually started).
+#define GAME_OVER_FLASH_DURATION_MS  1500UL
+#define GAME_OVER_FLASH_BLINK_MS     250UL
 
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----

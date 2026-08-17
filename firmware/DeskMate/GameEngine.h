@@ -5,9 +5,14 @@
 // (drawing), so the SSD1306 `display` object stays owned by one file.
 
 enum GameRunState {
-  GAME_COUNTDOWN,  // "Ready" / "Set" / "Go" intro, nothing moves yet
+  GAME_COUNTDOWN,    // "Ready" / "Set" / "Go" intro, nothing moves yet
   GAME_RUNNING,
-  GAME_OVER
+  // Last life just lost - physics frozen (world stays exactly as it looked
+  // at that instant), DisplayUI.cpp blinks a "GAME OVER" box over it for
+  // GAME_OVER_FLASH_DURATION_MS (Config.h), then stepGame() itself advances
+  // to GAME_OVER once that elapses.
+  GAME_OVER_FLASH,
+  GAME_OVER          // resting score card - press to retry
 };
 
 // Only one obstacle is ever in play at a time - it scrolls fully off
@@ -32,13 +37,15 @@ struct GameSnapshot {
   GameCactus cactus;
   int score;
   int bestScore;  // highest score seen since boot - see bestScore in GameEngine.cpp
+  int lives;      // remaining hits before the run ends, 0..GAME_LIVES (Config.h)
 };
 
 // Resets to a fresh run: GAME_COUNTDOWN state, dino grounded, no cacti,
-// score 0. Does NOT touch the best-score high-water mark - that persists
-// in RAM across runs (and across mode switches) until the device reboots
-// or gets reflashed; there's no flash/EEPROM persistence, by design.
-// Called on entering game mode (long-press or remote toggle-on).
+// score 0, lives back to GAME_LIVES. Does NOT touch the best-score
+// high-water mark - that persists in RAM across runs (and across mode
+// switches) until the device reboots or gets reflashed; there's no
+// flash/EEPROM persistence, by design. Called on entering game mode
+// (long-press or remote toggle-on).
 void initGame();
 
 // Alias for initGame() - used when a short press on the game-over screen
@@ -61,5 +68,11 @@ void gameJump();
 // frequency - see GAME_FRAME_INTERVAL_MS in Config.h.
 void stepGame();
 
+// True only once the GAME_OVER_FLASH blink has finished and the resting
+// score card is showing - i.e. exactly when a short press should restart
+// (see Games.cpp's dinoOnShortPress()). Check snapshot().state directly
+// against GAME_OVER_FLASH if you need to know as soon as the last life is
+// lost instead (see Games.cpp's dinoStep()).
 bool isGameOver();
+
 const GameSnapshot& getGameSnapshot();

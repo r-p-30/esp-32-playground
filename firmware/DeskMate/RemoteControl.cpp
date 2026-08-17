@@ -37,6 +37,12 @@ static bool nightModeRawLastPoll = false;
 static bool gameModeRawLastPoll = false;
 static int pendingNightModeChange = -1;  // -1 none, 0 off, 1 on
 static int pendingGameModeChange = -1;
+// The very first state push after connecting just seeds the two
+// *RawLastPoll baselines above - it must NOT be treated as a change to act
+// on, or a device reboot/reflash while the site still has an old session's
+// nightModeEnabled/gameModeEnabled: true persisted would immediately
+// re-enter that mode on its own instead of always booting to cards.
+static bool firstStatePollSeen = false;
 
 // Expects "wss://host/path" form.
 static bool splitWsUrl(const char* urlStr, String& outHost, String& outPath) {
@@ -90,18 +96,22 @@ static void applyStateJson(const uint8_t* payload, size_t length) {
   carouselIntervalMs = (unsigned long)carouselSec * 1000UL;
 
   // Night/game mode: edge-triggered on the site's value changing, not
-  // blindly reasserted - see RemoteControl.h for why.
+  // blindly reasserted - see RemoteControl.h for why. Skipped on the very
+  // first poll (see firstStatePollSeen's comment) - that one only seeds
+  // the baseline, so the device always boots to cards regardless of
+  // whatever the site had persisted from before.
   bool rawNight = doc["nightModeEnabled"] | false;
-  if (rawNight != nightModeRawLastPoll) {
+  if (firstStatePollSeen && rawNight != nightModeRawLastPoll) {
     pendingNightModeChange = rawNight ? 1 : 0;
   }
   nightModeRawLastPoll = rawNight;
 
   bool rawGame = doc["gameModeEnabled"] | false;
-  if (rawGame != gameModeRawLastPoll) {
+  if (firstStatePollSeen && rawGame != gameModeRawLastPoll) {
     pendingGameModeChange = rawGame ? 1 : 0;
   }
   gameModeRawLastPoll = rawGame;
+  firstStatePollSeen = true;
 
   // One-shot actions below - only fire on a genuinely new revision.
   long revision = doc["revision"] | -1L;

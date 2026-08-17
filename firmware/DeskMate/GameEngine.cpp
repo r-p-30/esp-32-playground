@@ -32,6 +32,8 @@
 static GameRunState runState = GAME_COUNTDOWN;
 static unsigned long countdownStartMs = 0;
 static int countdownValue = 2;
+static int lives = GAME_LIVES;
+static unsigned long gameOverFlashStartMs = 0;
 
 static bool airborne = false;
 static unsigned long jumpStartMs = 0;
@@ -62,6 +64,8 @@ static void resetCommon() {
   runState = GAME_COUNTDOWN;
   countdownStartMs = millis();
   countdownValue = 2;
+  lives = GAME_LIVES;
+  gameOverFlashStartMs = 0;
 
   airborne = false;
   jumpStartMs = 0;
@@ -115,6 +119,18 @@ void stepGame() {
   lastStepMs = now;
 
   if (runState == GAME_OVER) return;  // frozen until gameRestart()
+
+  if (runState == GAME_OVER_FLASH) {
+    // World stays exactly as it was at the moment of the last hit - no
+    // scroll/physics update here, just watch the clock for when to hand
+    // off to the resting GAME_OVER score card (DisplayUI.cpp's blink
+    // itself is driven off wall-clock time, not this timer, so it keeps
+    // animating every redraw regardless).
+    if (now - gameOverFlashStartMs >= GAME_OVER_FLASH_DURATION_MS) {
+      runState = GAME_OVER;
+    }
+    return;
+  }
 
   if (runState == GAME_COUNTDOWN) {
     unsigned long elapsed = now - countdownStartMs;
@@ -187,7 +203,21 @@ void stepGame() {
     // shouldn't become unwinnable-feeling on top of it.
     bool notCleared = dinoHeightPx < ((int)cactusH - GAME_JUMP_CLEARANCE_FORGIVENESS_PX);
     if (horizOverlap && notCleared) {
-      runState = GAME_OVER;
+      // Dismiss the obstacle immediately, same as it scrolling fully off
+      // (including the distanceUntilNextSpawn reset below) - otherwise
+      // it'd stay active and overlapping next frame too, costing more
+      // than one life for a single touch.
+      cactus.active = false;
+      distanceUntilNextSpawn = randomSpawnGap();
+      lives--;
+      if (lives <= 0) {
+        runState = GAME_OVER_FLASH;
+        gameOverFlashStartMs = now;
+      }
+      // else: non-fatal miss - run keeps going. Games.cpp's dinoStep()
+      // notices the lives drop (via the snapshot) and plays a sound - this
+      // file has no display or sound calls in it at all, same reasoning as
+      // GameEngine.h's top comment about staying physics/state-only.
     }
   }
 }
@@ -202,5 +232,6 @@ const GameSnapshot& getGameSnapshot() {
   snap.cactus = cactus;
   snap.score = score;
   snap.bestScore = bestScore;
+  snap.lives = lives;
   return snap;
 }
