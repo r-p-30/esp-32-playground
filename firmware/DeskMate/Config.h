@@ -94,10 +94,20 @@
 // to 6) if 8 turns out too hard given the rotate-to-aim input; kept as a
 // single constant for exactly that reason.
 #define MOLE_POSITIONS      8
-// Constant per-mole time window, not scaled by score - aiming requires
-// rotating to the right position first ("spot it, rotate to it, press"),
-// so this stays generous for the whole run rather than ramping up.
+// Starting per-mole time window - generous, since aiming requires
+// rotating to the right position first ("spot it, rotate to it, press").
+// Shrinks as score grows (see the three constants below), rather than
+// staying fixed for the whole run.
 #define MOLE_VISIBLE_MS     1800UL
+// Every this-many points, the visible window shrinks by MOLE_VISIBLE_MS_STEP
+// - a fixed score interval rather than per-hit, so the ramp is predictable
+// (score 20 -> one step down, score 40 -> two steps down, ...).
+#define MOLE_DIFFICULTY_STEP_SCORE  20
+#define MOLE_VISIBLE_MS_STEP        150UL
+// Floor on the shrinking window - stays reachable given the rotate-then-
+// press input even at high score, same "keep it forgiving" reasoning as
+// Dino's optional speed-up (GAME_SCROLL_SPEED_PX_S's comment elsewhere).
+#define MOLE_VISIBLE_MS_MIN         700UL
 // Run ends after this many timed-out (unhit) moles - a miss on this game
 // means a mole's window expired, not a whiffed press on an empty hole.
 #define MOLE_MAX_MISSES     10

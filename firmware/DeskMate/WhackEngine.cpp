@@ -18,6 +18,17 @@ static int misses = 0;
 
 static unsigned long gameOverFlashStartMs = 0;
 
+// Shrinks the visible window by one MOLE_VISIBLE_MS_STEP per
+// MOLE_DIFFICULTY_STEP_SCORE points of score, floored at
+// MOLE_VISIBLE_MS_MIN - recomputed fresh each spawn rather than stored, so
+// it always reflects the score at that moment.
+static unsigned long currentMoleVisibleMs() {
+  int steps = score / MOLE_DIFFICULTY_STEP_SCORE;
+  long ms = (long)MOLE_VISIBLE_MS - steps * (long)MOLE_VISIBLE_MS_STEP;
+  if (ms < (long)MOLE_VISIBLE_MS_MIN) ms = (long)MOLE_VISIBLE_MS_MIN;
+  return (unsigned long)ms;
+}
+
 // Picks a random hole, excluding excludePos (pass -1 to allow any hole) -
 // keeps the mole from reappearing on the same hole it was just hit/missed
 // on, same "next spawn differs from last" reasoning as GameEngine.cpp's
@@ -105,7 +116,7 @@ void stepMoleGame() {
   }
 
   // WHACK_RUNNING from here down.
-  if (now - moleSpawnMs >= MOLE_VISIBLE_MS) {
+  if (now - moleSpawnMs >= currentMoleVisibleMs()) {
     misses++;
     if (misses >= MOLE_MAX_MISSES) {
       // Last allowed miss - dismiss the mole (no respawn) so the frozen
