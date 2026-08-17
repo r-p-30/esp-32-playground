@@ -6,13 +6,17 @@
 #include "BuzzerFX.h"
 #include "TimeSync.h"
 #include "RemoteControl.h"
-#include "GameEngine.h"
+#include "Game.h"
 
-enum DeviceMode { MODE_CARDS, MODE_GAME };
+enum DeviceMode { MODE_CARDS, MODE_GAME_MENU, MODE_GAME };
 
 static int currentCard = 0;
 static unsigned long lastCardChangeMs = 0;
 static DeviceMode mode = MODE_CARDS;
+// Which GAMES[] entry the menu cursor is on / which one is currently
+// running. Deliberately not reset when leaving the menu or a game - so
+// coming back lands back where you left off, same as currentCard.
+static int selectedGame = GAME_DINO_JUMP;
 static bool nightModeActive = false;
 static unsigned long lastWifiCheckMs = 0;
 #define WIFI_RECONNECT_CHECK_MS 10000UL
@@ -35,34 +39,58 @@ static void changeToCard(int index) {
 static void showCurrentMode() {
   if (mode == MODE_GAME) {
     showGameFrame();
+  } else if (mode == MODE_GAME_MENU) {
+    showGameMenu(selectedGame);
   } else {
     showCard(currentCard);
   }
 }
 
-// Funnels every way into game mode (local long-press, remote toggle-on)
-// through one place, same reasoning as changeToCard() - keeps the fresh
-// Ready/Set/Go countdown and the game-over sound tracker consistent
-// regardless of what triggered entry. forceHeartbeatNow() here (and in
-// every other mode-change path below) is what keeps the site's stored
-// toggle state in sync when the *button* is what changed it - without
-// this, the site only finds out on its next periodic heartbeat (up to
-// REMOTE_HEARTBEAT_INTERVAL_MS later), and the "Game mode"/"Night mode"
+// Funnels every way into the game picker menu (local long-press, remote
+// toggle-on) through one place, same reasoning as changeToCard() - keeps
+// things consistent regardless of what triggered entry. forceHeartbeatNow()
+// here (and in every other mode-change path below) is what keeps the site's
+// stored toggle state in sync when the *button* is what changed it -
+// without this, the site only finds out on its next periodic heartbeat (up
+// to REMOTE_HEARTBEAT_INTERVAL_MS later), and the "Game mode"/"Night mode"
 // checkboxes would silently disagree with the device until then. Harmless
 // to also call it when the change came from the site itself - the site
 // already knows in that case, so it's just a redundant, cheap heartbeat.
-static void enterGameMode() {
-  mode = MODE_GAME;
-  initGame();
-  gameOverSoundPlayed = false;
+static void enterGameMenu() {
+  mode = MODE_GAME_MENU;
   playChime();
-  showCurrentMode();
+  showGameMenu(selectedGame);
   forceHeartbeatNow();
 }
 
-// Shared by both ways out of game mode back to cards (local long/very-long
-// press, and the site turning its Game mode toggle off) - see
-// enterGameMode()'s comment for why forceHeartbeatNow() matters here too.
+// Short press on the menu picks whichever GAMES[] entry is currently
+// selected - a no-op for a stub (`implemented: false`), so pressing on
+// "Whack-a-mole (soon)" just does nothing rather than launching a blank
+// screen. See enterGameMenu()'s comment for forceHeartbeatNow().
+static void enterSelectedGame() {
+  if (!GAMES[selectedGame].implemented) return;
+  mode = MODE_GAME;
+  gameOverSoundPlayed = false;
+  GAMES[selectedGame].enter();
+  playChime();
+  forceHeartbeatNow();
+}
+
+// Long/very-long press from inside a game now backs out to the picker menu
+// rather than straight to cards (see enterSelectedGame()/exitGameModeToCards()
+// for the rest of the in/out path) - exitGameModeToCards() is what a second
+// long/very-long press from the menu itself falls through to.
+static void exitGameToMenu() {
+  mode = MODE_GAME_MENU;
+  playChime();
+  showGameMenu(selectedGame);
+  forceHeartbeatNow();
+}
+
+// Shared by every way out back to cards - local long/very-long press from
+// the game menu, and the site turning its Game mode toggle off (which can
+// land while either a game or the menu is showing) - see enterGameMenu()'s
+// comment for why forceHeartbeatNow() matters here too.
 static void exitGameModeToCards() {
   mode = MODE_CARDS;
   playChime();
@@ -88,7 +116,7 @@ static void setNightMode(bool active) {
     showCurrentMode();
     playChime();
   }
-  forceHeartbeatNow();  // see enterGameMode()'s comment
+  forceHeartbeatNow();  // see enterGameMenu()'s comment
 }
 
 void setup() {
@@ -124,22 +152,50 @@ void loop() {
       setNightMode(false);
     }
   } else if (mode == MODE_GAME) {
-    // Short press either jumps (mid-run) or restarts (on the game-over
-    // screen) - a no-op during the Ready/Set/Go countdown, handled inside
-    // gameJump() itself so a stray press can't pre-queue a jump. Long or
-    // very long press both back out to card browsing - very long press
-    // does NOT enter night mode from here, only card mode does that.
+    // Short press is whatever the active game's own onShortPress() does
+    // (jump/restart for Dino) - `wasOver` catches the restart case
+    // generically, so gameOverSoundPlayed resets without this file needing
+    // to know that "restart" is a Dino-specific concept. Long or very long
+    // press both back out to the game menu (not straight to cards anymore)
+    // - very long press does NOT enter night mode from here, only card
+    // mode does that.
     if (ev == ENC_SHORT_PRESS) {
-      if (isGameOver()) {
-        gameRestart();
-        gameOverSoundPlayed = false;
-        showGameFrame();
-      } else if (getGameSnapshot().state == GAME_RUNNING) {
-        gameJump();
-        playGameJump();
-      }
+      bool wasOver = GAMES[selectedGame].isOver();
+      GAMES[selectedGame].onShortPress();
+      if (wasOver) gameOverSoundPlayed = false;
     } else if (ev == ENC_LONG_PRESS || ev == ENC_VERY_LONG_PRESS) {
-      exitGameModeToCards();
+      exitGameToMenu();
+    }
+  } else if (mode == MODE_GAME_MENU) {
+    // Rotation moves the arrow up/down the list (with a nav blip, same as
+    // browsing cards) and wraps at the ends, same modulo pattern as
+    // nextVisibleIndex(). Short press launches whichever game is
+    // highlighted; long/very-long press backs all the way out to cards.
+    switch (ev) {
+      case ENC_NEXT:
+        selectedGame = (selectedGame + 1) % GAME_COUNT;
+        beepCardChange();
+        showGameMenu(selectedGame);
+        break;
+
+      case ENC_PREV:
+        selectedGame = (selectedGame - 1 + GAME_COUNT) % GAME_COUNT;
+        beepCardChange();
+        showGameMenu(selectedGame);
+        break;
+
+      case ENC_SHORT_PRESS:
+        enterSelectedGame();
+        break;
+
+      case ENC_LONG_PRESS:
+      case ENC_VERY_LONG_PRESS:
+        exitGameModeToCards();
+        break;
+
+      case ENC_NONE:
+      default:
+        break;
     }
   } else {
     switch (ev) {
@@ -156,7 +212,7 @@ void loop() {
         break;
 
       case ENC_LONG_PRESS:
-        enterGameMode();
+        enterGameMenu();
         break;
 
       case ENC_VERY_LONG_PRESS:
@@ -184,7 +240,11 @@ void loop() {
     }
   }
 
-  loopRemoteControl(currentCard, nightModeActive, mode == MODE_GAME);
+  // gameMode reported to the site covers both the picker menu and an
+  // actual game in progress - from the site's side "Game mode" just means
+  // "off the card browser", same as what the local long-press now opens
+  // into (the menu) rather than jumping straight into Dino.
+  loopRemoteControl(currentCard, nightModeActive, mode != MODE_CARDS);
 
   // Edge-triggered on the site's stored value actually changing, so a
   // local button toggle isn't immediately re-fought by an unchanged
@@ -196,7 +256,7 @@ void loop() {
   int gameChange = consumeRemoteGameModeChange();
   if (gameChange >= 0 && !nightModeActive) {
     if (gameChange == 1) {
-      enterGameMode();
+      enterGameMenu();
     } else {
       exitGameModeToCards();
     }
@@ -242,13 +302,16 @@ void loop() {
     }
     updateDisplayAnimation();
   } else if (mode == MODE_GAME) {
-    updateGameFrame();
+    GAMES[selectedGame].step();
     // Fires once on the transition into game-over (not every loop while
     // that screen sits there waiting for a retry press) - see
     // gameOverSoundPlayed's declaration above.
-    if (isGameOver() && !gameOverSoundPlayed) {
+    if (GAMES[selectedGame].isOver() && !gameOverSoundPlayed) {
       gameOverSoundPlayed = true;
       playGameOver();
     }
   }
+  // mode == MODE_GAME_MENU: no continuous per-loop redraw - the menu only
+  // repaints on ENC_NEXT/ENC_PREV/ENC_SHORT_PRESS (see the switch above),
+  // there's no animation running while it just sits there.
 }

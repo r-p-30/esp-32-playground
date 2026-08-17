@@ -18,6 +18,12 @@ void updateDisplayAnimation();
 // without waiting for the next throttled updateGameFrame() tick.
 void showGameFrame();
 
+// Draws the game-picker menu (Game.h's GAMES[]), one row per entry, arrow
+// beside whichever index is selected. Call once on entering the menu and
+// again on every ENC_NEXT/ENC_PREV while in it - no continuous animation,
+// so unlike showGameFrame() there's no throttled per-loop counterpart.
+void showGameMenu(int selectedIndex);
+
 // Call every loop() iteration while in game mode. Throttles itself to
 // GAME_FRAME_INTERVAL_MS (Config.h) - each time it fires, advances
 // GameEngine's physics one step and redraws. Deliberately slow so the

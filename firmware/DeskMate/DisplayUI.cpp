@@ -10,6 +10,7 @@
 #include "Cards.h"
 #include "Config.h"
 #include "GameEngine.h"
+#include "Game.h"
 
 // NOTE: if the 1.3" OLED turns out to use a different controller chip than
 // SSD1306 once it arrives, swap this library for U8g2 - see plan section 8.
@@ -1345,6 +1346,52 @@ void showGameFrame() {
   } else {
     drawGamePlayScene(snap);
   }
+}
+
+// Rows split the full 64px height evenly (64 / GAME_COUNT == 16, no
+// remainder) so the list fills the screen edge to edge with nothing left
+// over - same "no permanent frame" reasoning as the game screens above,
+// there's no border eating into that budget either.
+void showGameMenu(int selectedIndex) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  const int rowH = OLED_HEIGHT / GAME_COUNT;
+
+  for (int i = 0; i < GAME_COUNT; i++) {
+    int rowTop = i * rowH;
+    int textY = rowTop + (rowH - 8) / 2;  // 8 = size-1 glyph height
+
+    if (i == selectedIndex) {
+      int ay = rowTop + rowH / 2;
+      display.fillTriangle(2, ay - 3, 2, ay + 3, 7, ay, SSD1306_WHITE);
+    }
+
+    char label[40];
+    strncpy(label, GAMES[i].name, sizeof(label) - 1);
+    label[sizeof(label) - 1] = '\0';
+
+    if (!GAMES[i].implemented) {
+      // Only appended if it actually fits next to the name - "can write
+      // (coming soon) there if space permits" - so a long name like
+      // "Whack-a-mole" just shows bare instead of getting clipped.
+      char withSuffix[40];
+      snprintf(withSuffix, sizeof(withSuffix), "%s (soon)", GAMES[i].name);
+      int16_t x1, y1;
+      uint16_t w, h;
+      display.getTextBounds(withSuffix, 0, textY, &x1, &y1, &w, &h);
+      if (12 + (int)w <= OLED_WIDTH - 2) {
+        strncpy(label, withSuffix, sizeof(label) - 1);
+        label[sizeof(label) - 1] = '\0';
+      }
+    }
+
+    display.setCursor(12, textY);
+    display.print(label);
+  }
+
+  display.display();
 }
 
 static unsigned long lastGameFrameMs = 0;
