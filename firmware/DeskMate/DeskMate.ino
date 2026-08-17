@@ -149,11 +149,17 @@ void loop() {
     // Short press is entirely whatever the active game's own
     // onShortPress() does (jump/restart for Dino, including any sound
     // that goes with it) - this file doesn't need to know what that means
-    // for a given game. Long or very long press both back out to the game
-    // menu (not straight to cards anymore) - very long press does NOT
-    // enter night mode from here, only card mode does that.
+    // for a given game. Rotation is likewise entirely the active game's
+    // own onRotate() (Dino ignores it; Whack-a-mole moves its cursor).
+    // Long or very long press both back out to the game menu (not
+    // straight to cards anymore) - very long press does NOT enter night
+    // mode from here, only card mode does that.
     if (ev == ENC_SHORT_PRESS) {
       GAMES[selectedGame].onShortPress();
+    } else if (ev == ENC_NEXT) {
+      GAMES[selectedGame].onRotate(1);
+    } else if (ev == ENC_PREV) {
+      GAMES[selectedGame].onRotate(-1);
     } else if (ev == ENC_LONG_PRESS || ev == ENC_VERY_LONG_PRESS) {
       exitGameToMenu();
     }

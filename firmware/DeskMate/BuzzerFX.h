@@ -17,6 +17,15 @@ void playIncomingMessage();
 // update reached the device without touching card content.
 void playIdentifyPing();
 
+// Single low tone sustained for the full GAME_OVER_FLASH_DURATION_MS
+// (Config.h) - fired once, right as any game enters its GAME_OVER_FLASH
+// state, so the buzzer rings for the whole "GAME OVER" blink instead of
+// just a couple short beeps at the start of it. Shared across every game
+// (Dino, Whack-a-mole, ...) rather than each having its own game-over
+// sound. Non-blocking - tone() with a duration returns immediately and
+// keeps sounding in the background, same as playGameJump()/playGameMiss().
+void playGameOverAlarm();
+
 // Quick blip on a successful jump - deliberately tiny/non-blocking since
 // it fires from inside the game's input handling, not a rare one-off.
 void playGameJump();

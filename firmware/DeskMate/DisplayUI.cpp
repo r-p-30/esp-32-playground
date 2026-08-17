@@ -10,6 +10,7 @@
 #include "Cards.h"
 #include "Config.h"
 #include "GameEngine.h"
+#include "WhackEngine.h"
 #include "Game.h"
 
 // NOTE: if the 1.3" OLED turns out to use a different controller chip than
@@ -1458,6 +1459,198 @@ void updateGameFrame() {
   lastGameFrameMs = now;
   stepGame();
   showGameFrame();
+}
+
+// Holes arranged in a ring - centered horizontally, kept clear of the
+// score (top-left) and the miss-pip columns down the left/right edges
+// (drawMissPips() below) so nothing overlaps. index 0 sits at 12 o'clock; positions advance
+// clockwise as moleMoveCursor()'s cursorPos increases (matches ENC_NEXT
+// rotating clockwise), same "one detent = one position" mapping the game
+// menu already uses for ENC_NEXT/ENC_PREV.
+static const int MOLE_CIRCLE_CX = 64;
+static const int MOLE_CIRCLE_CY = 32;
+static const int MOLE_CIRCLE_R = 18;
+static const int MOLE_HOLE_R = 4;
+
+static float moleHoleAngle(int index) {
+  return -PI / 2.0f + index * (2.0f * PI / MOLE_POSITIONS);
+}
+
+static void moleHolePos(int index, int& outX, int& outY) {
+  float angle = moleHoleAngle(index);
+  outX = MOLE_CIRCLE_CX + (int)(cosf(angle) * MOLE_CIRCLE_R);
+  outY = MOLE_CIRCLE_CY + (int)(sinf(angle) * MOLE_CIRCLE_R);
+}
+
+// A squashed "hole in the ground" - Adafruit_GFX has no ellipse primitive,
+// so a small rounded rect reads closer to an actual hole than a plain
+// circle would.
+static void drawMoleHoleGround(int hx, int hy) {
+  display.drawRoundRect(hx - 5, hy - 3, 10, 6, 3, SSD1306_WHITE);
+}
+
+// A little mole popping up out of its hole - mound body, two ear bumps,
+// two carved-out eyes - instead of a plain filled dot, so the hit target
+// actually reads as a critter rather than an abstract shape.
+static void drawMoleCreature(int hx, int hy) {
+  display.fillRoundRect(hx - 4, hy - 7, 8, 7, 2, SSD1306_WHITE);
+  display.fillCircle(hx - 3, hy - 7, 1, SSD1306_WHITE);
+  display.fillCircle(hx + 3, hy - 7, 1, SSD1306_WHITE);
+  display.fillCircle(hx - 2, hy - 4, 1, SSD1306_BLACK);
+  display.fillCircle(hx + 2, hy - 4, 1, SSD1306_BLACK);
+}
+
+// Cursor marker: a small arrow on the same radial spoke as the hole,
+// pointing in at it from just outside the ring - reuses the same
+// fillTriangle "pointer" idea as showGameMenu()'s row-selector arrow, just
+// radiating outward instead of sitting beside a list row. Deliberately a
+// different shape family from the hole/mole so a cursor sitting on the
+// mole's hole still reads as two distinct things, not one ambiguous blob.
+static void drawMoleCursorArrow(int hx, int hy, float angle) {
+  float ux = cosf(angle), uy = sinf(angle);   // outward radial direction
+  float px = -uy, py = ux;                     // perpendicular, for the arrow's base spread
+
+  int tipX = hx - (int)(ux * (MOLE_HOLE_R + 1));
+  int tipY = hy - (int)(uy * (MOLE_HOLE_R + 1));
+  int baseCx = hx + (int)(ux * (MOLE_HOLE_R + 6));
+  int baseCy = hy + (int)(uy * (MOLE_HOLE_R + 6));
+  int b1x = baseCx + (int)(px * 3), b1y = baseCy + (int)(py * 3);
+  int b2x = baseCx - (int)(px * 3), b2y = baseCy - (int)(py * 3);
+
+  display.fillTriangle(tipX, tipY, b1x, b1y, b2x, b2y, SSD1306_WHITE);
+}
+
+// molePosArg < 0 means no mole is currently shown (countdown, or the final
+// miss that ended the run - see WhackEngine.cpp's stepMoleGame()).
+static void drawMoleHoles(int cursorPos, int molePosArg) {
+  for (int i = 0; i < MOLE_POSITIONS; i++) {
+    int hx, hy;
+    moleHolePos(i, hx, hy);
+    drawMoleHoleGround(hx, hy);
+    if (i == molePosArg) {
+      drawMoleCreature(hx, hy);
+    }
+    if (i == cursorPos) {
+      drawMoleCursorArrow(hx, hy, moleHoleAngle(i));
+    }
+  }
+}
+
+// Same fill-as-you-go pip idea as drawLivesPips() above, but counts up
+// (filled = a miss already happened) instead of down, and splits
+// MOLE_MAX_MISSES (10) dots into two columns of 5 down the left/right
+// screen edges rather than one row - a single row of 10 ran right through
+// the hole ring's footprint at the bottom; these columns sit entirely
+// outside it (the ring's own footprint stays within roughly x 37-91), so
+// there's no overlap regardless of how many are filled. Fills top-down on
+// the left first, then top-down on the right.
+static void drawMissPips(int misses) {
+  const int leftX = 6;
+  const int rightX = OLED_WIDTH - 6;
+  const int topY = 16;
+  const int spacing = 9;
+  const int perSide = MOLE_MAX_MISSES / 2;
+
+  for (int i = 0; i < perSide; i++) {
+    int y = topY + i * spacing;
+
+    if (i < misses) {
+      display.fillCircle(leftX, y, 2, SSD1306_WHITE);
+    } else {
+      display.drawCircle(leftX, y, 2, SSD1306_WHITE);
+    }
+
+    int rightIndex = i + perSide;
+    if (rightIndex < misses) {
+      display.fillCircle(rightX, y, 2, SSD1306_WHITE);
+    } else {
+      display.drawCircle(rightX, y, 2, SSD1306_WHITE);
+    }
+  }
+}
+
+static void drawMoleOverScreen(const WhackSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  char buf[64];
+  snprintf(buf, sizeof(buf), "GAME OVER\n\nscore: %d\nbest: %d\n\npress to retry",
+           snap.score, snap.bestScore);
+  printCentered(buf, 2, OLED_HEIGHT - 2, 9);
+
+  // No permanent frame - same reasoning as Dino's drawGameOverScreen().
+  display.display();
+}
+
+static void drawMolePlayScene(const WhackSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  if (snap.state == WHACK_RUNNING) {
+    drawMoleHoles(snap.cursorPos, snap.molePos);
+    display.setCursor(4, 4);
+    display.print(snap.score);
+    drawMissPips(snap.misses);
+  } else {
+    // WHACK_COUNTDOWN - board stays empty until play actually starts, same
+    // "nothing moves yet" reasoning as GameEngine.h's GAME_COUNTDOWN.
+    const char* word = snap.countdownValue == 2 ? "READY" : (snap.countdownValue == 1 ? "SET" : "GO");
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%s\n%d", word, snap.countdownValue);
+    printCentered(buf, 16, 48, 12);
+  }
+
+  display.display();
+}
+
+// Frozen play-scene with a blinking "GAME OVER" box over it, same
+// structure as Dino's drawGameOverFlashScene() - duplicated rather than
+// shared since the two games' snapshots/scenes have nothing in common
+// beyond both wanting this blink behavior.
+static void drawMoleOverFlashScene(const WhackSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  drawMoleHoles(snap.cursorPos, snap.molePos);
+  display.setCursor(4, 4);
+  display.print(snap.score);
+  drawMissPips(snap.misses);
+
+  bool blinkOn = (millis() / GAME_OVER_FLASH_BLINK_MS) % 2 == 0;
+  if (blinkOn) {
+    const int boxW = 76, boxH = 22;
+    const int boxX = (OLED_WIDTH - boxW) / 2;
+    const int boxY = (OLED_HEIGHT - boxH) / 2;
+    display.fillRect(boxX, boxY, boxW, boxH, SSD1306_BLACK);
+    display.drawRect(boxX, boxY, boxW, boxH, SSD1306_WHITE);
+    printCentered("GAME OVER", boxY, boxY + boxH, 9);
+  }
+
+  display.display();
+}
+
+void showMoleFrame() {
+  const WhackSnapshot& snap = getMoleSnapshot();
+  if (snap.state == WHACK_OVER) {
+    drawMoleOverScreen(snap);
+  } else if (snap.state == WHACK_OVER_FLASH) {
+    drawMoleOverFlashScene(snap);
+  } else {
+    drawMolePlayScene(snap);
+  }
+}
+
+static unsigned long lastMoleFrameMs = 0;
+
+void updateMoleFrame() {
+  unsigned long now = millis();
+  if (now - lastMoleFrameMs < GAME_FRAME_INTERVAL_MS) return;
+  lastMoleFrameMs = now;
+  stepMoleGame();
+  showMoleFrame();
 }
 
 static char lastNightTimeStr[8] = "";

@@ -19,8 +19,10 @@ enum GameId {
 // Every game is expected to follow the same lifecycle beat, even though
 // DeskMate.ino stays oblivious to the details behind enter()/step()/
 // onShortPress(): a Ready/Set/Go countdown, then play, then on loss a
-// brief frozen-frame "GAME OVER" flash (blink + a beep, under 2s) before
-// settling on a resting score card that a short press restarts from. See
+// brief frozen-frame "GAME OVER" flash (blink + a sustained alarm tone for
+// the whole flash window, see BuzzerFX.h's playGameOverAlarm(), under 2s)
+// before settling on a resting score card that a short press restarts
+// from. See
 // Games.cpp's Dino wrapper (GameEngine.cpp's GAME_COUNTDOWN /
 // GAME_RUNNING / GAME_OVER_FLASH / GAME_OVER states) for the reference
 // implementation of that pattern - keep new games consistent with it.
@@ -34,6 +36,12 @@ struct Game {
   void (*enter)();         // reset to a fresh run and draw the first frame; called once on selecting from the menu
   void (*step)();          // advance by one tick and redraw; called every loop() while this game is the active one - also this game's own job to fire its own transition sounds (loss beep, miss blip, ...), see Games.cpp's dinoStep()
   void (*onShortPress)();  // per-game short-press behavior (jump/restart, whack a mole, rotate a piece, ...)
+  // direction: +1 for ENC_NEXT, -1 for ENC_PREV. Dino Jump has no use for
+  // rotation (no-op stub), but Whack-a-mole (cursor move) and later
+  // Snake/Tetris (steer/shift) need it - DeskMate.ino forwards ENC_NEXT/
+  // ENC_PREV here while a game is active, same as it already forwards
+  // ENC_SHORT_PRESS to onShortPress above.
+  void (*onRotate)(int direction);
   int (*bestScore)();      // this game's own high-water mark - kept separate per game, not shared
 };
 

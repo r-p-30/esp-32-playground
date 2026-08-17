@@ -89,6 +89,19 @@
 #define GAME_OVER_FLASH_DURATION_MS  1500UL
 #define GAME_OVER_FLASH_BLINK_MS     250UL
 
+// ---- Whack-a-mole ----
+// Hole count around the on-screen circle - first thing to tune down (e.g.
+// to 6) if 8 turns out too hard given the rotate-to-aim input; kept as a
+// single constant for exactly that reason.
+#define MOLE_POSITIONS      8
+// Constant per-mole time window, not scaled by score - aiming requires
+// rotating to the right position first ("spot it, rotate to it, press"),
+// so this stays generous for the whole run rather than ramping up.
+#define MOLE_VISIBLE_MS     1800UL
+// Run ends after this many timed-out (unhit) moles - a miss on this game
+// means a mole's window expired, not a whiffed press on an empty hole.
+#define MOLE_MAX_MISSES     10
+
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----
 // The device holds one permanent WebSocket connection to the hosted site

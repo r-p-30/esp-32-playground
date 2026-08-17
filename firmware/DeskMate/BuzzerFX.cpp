@@ -52,3 +52,13 @@ void playGameMiss() {
   // game's per-frame stepping, not a rare one-off.
   tone(PIN_BUZZER, 600, 80);
 }
+
+void playGameOverAlarm() {
+  // Low and sustained, distinct from every other in-game beep (all of
+  // which are short and higher-pitched) - reads as "the run is over," not
+  // another gameplay blip. Non-blocking: tone()'s duration parameter lets
+  // it keep ringing on its own for the whole flash window while the
+  // caller's loop() keeps running (see updateGameFrame()/updateMoleFrame()
+  // redrawing the blink during that same window).
+  tone(PIN_BUZZER, 300, GAME_OVER_FLASH_DURATION_MS);
+}

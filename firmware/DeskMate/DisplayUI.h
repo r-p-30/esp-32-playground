@@ -30,6 +30,13 @@ void showGameMenu(int selectedIndex);
 // game stays reactable-to on real hardware.
 void updateGameFrame();
 
+// Same pair of calls as showGameFrame()/updateGameFrame() above, but for
+// the whack-a-mole game mode (WhackEngine.h) - kept as separate functions
+// rather than parameterizing the Dino ones, since the two games' snapshots
+// (GameSnapshot vs WhackSnapshot) and scenes share no drawing code.
+void showMoleFrame();
+void updateMoleFrame();
+
 // Dims the display and shows the full-screen inverted clock. Call once
 // when entering; call renderNightMode() every loop() iteration after
 // that (it only actually redraws when the displayed minute changes).
