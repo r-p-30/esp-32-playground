@@ -112,6 +112,74 @@
 // means a mole's window expired, not a whiffed press on an empty hole.
 #define MOLE_MAX_MISSES     10
 
+// ---- Snake ----
+// 8px cells - matches the pip/segment sizes already used elsewhere in game
+// mode. Playfield sits below a permanent HUD strip (score + life pips),
+// unlike Whack's corner-overlay HUD - Snake's playfield can occupy any
+// cell on screen (Whack's ring keeps its corners clear by construction),
+// so score text needs a reserved strip instead of just tucking into a
+// corner.
+#define SNAKE_CELL_PX             8
+#define SNAKE_HUD_HEIGHT_PX       8
+#define SNAKE_GRID_COLS           16   // 128 / SNAKE_CELL_PX
+#define SNAKE_GRID_ROWS           7    // (64 - SNAKE_HUD_HEIGHT_PX) / SNAKE_CELL_PX
+
+#define SNAKE_START_LENGTH        3
+
+// Fixed-cadence auto-advance (a real grid-step tick, not a per-frame move)
+// - see currentTickIntervalMs() in SnakeEngine.cpp. Base pace is a touch
+// slower than the first pass (was 220) - still "keep it forgiving" per
+// GAME_SCROLL_SPEED_PX_S's reasoning, just not very much slower.
+// Speeds up as the body grows, same shape as Whack-a-mole's difficulty
+// ramp (MOLE_DIFFICULTY_STEP_SCORE/MOLE_VISIBLE_MS_STEP/MOLE_VISIBLE_MS_MIN
+// above) - every SNAKE_SPEEDUP_STEP_SCORE points, cut the interval by
+// SNAKE_SPEEDUP_STEP_MS, floored at SNAKE_TICK_MIN_MS. Unlike Whack's wide
+// 1800->700 range spread over many small 150ms steps, Snake's whole usable
+// range is much narrower (a rotary-encoder-steered snake can't go much
+// below ~130ms and stay reactable-to), so a 150ms cut is nearly the entire
+// range in one step - in practice this reads as one clear speed-up once
+// the body has grown a bit (10 food eaten), then holds at the faster pace,
+// rather than the old barely-perceptible 10ms-every-5-points creep.
+#define SNAKE_TICK_INTERVAL_MS    260UL
+#define SNAKE_TICK_MIN_MS         130UL
+#define SNAKE_SPEEDUP_STEP_SCORE  10
+#define SNAKE_SPEEDUP_STEP_MS     150UL
+
+// A hit on one of the last N tail segments doesn't count as a collision -
+// see SnakeEngine.cpp's stepSnakeGame() collision check. First constant to
+// tune down/up if self-collision ends up feeling too forgiving or too
+// strict.
+#define SNAKE_TAIL_FORGIVENESS_SEGMENTS  2
+
+// "3 retries" reuses GAME_LIVES (above, shared with Dino) rather than a
+// separate constant - that's exactly what GAME_LIVES already means.
+
+// If a hit happens within this many ticks of the last turn (0 = the same
+// tick the turn was taken), the turn - not just that final step - is
+// judged responsible for the crash: retreatSnake() rewinds all the way
+// back to exactly how the snake looked right before that turn (position
+// *and* heading), instead of just nudging back a couple of cells. A hit
+// with no turn this recently just gets the plain small nudge below,
+// heading unchanged - see SnakeEngine.cpp's stepSnakeGame()/retreatSnake().
+#define SNAKE_TURN_HIT_WINDOW_TICKS  3
+
+// How far back (in cells) the snake is nudged after a non-fatal hit that
+// *isn't* within SNAKE_TURN_HIT_WINDOW_TICKS of a turn - opposite whichever
+// direction it was heading at the moment of the hit. Kept small (one or
+// two cells) on purpose: just enough to clear the crash site, not a real
+// do-over - see SnakeEngine.cpp's retreatSnake().
+#define SNAKE_HIT_RETREAT_CELLS      2
+// Frozen "HIT!" flash before the retreat + recountdown - shorter than
+// GAME_OVER_FLASH_DURATION_MS since play resumes right after this, it
+// isn't the end of the run. Blink cadence reuses GAME_OVER_FLASH_BLINK_MS,
+// no separate constant needed.
+#define SNAKE_HIT_FLASH_DURATION_MS  900UL
+// Per-number duration for the post-hit 3/2/1 recountdown (numbers only, no
+// "READY/SET/GO" words) - snappier than GAME_COUNTDOWN_PHASE_MS (700ms)
+// since there's no word to read, just a number, and the player already
+// knows how to play by this point in the run.
+#define SNAKE_RECOUNTDOWN_PHASE_MS   500UL
+
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----
 // The device holds one permanent WebSocket connection to the hosted site

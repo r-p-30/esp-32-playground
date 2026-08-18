@@ -1,6 +1,7 @@
 #include "Game.h"
 #include "GameEngine.h"
 #include "WhackEngine.h"
+#include "SnakeEngine.h"
 #include "DisplayUI.h"
 #include "BuzzerFX.h"
 #include "Config.h"
@@ -131,6 +132,64 @@ static int whackBestScore() {
   return getMoleSnapshot().bestScore;
 }
 
+// ---- Snake ----
+// Same wrapper shape as Dino/Whack above - SnakeEngine.cpp/DisplayUI.cpp
+// own the physics/drawing, this exposes it through the shared Game
+// interface and owns the sound edge-detection (SnakeEngine.cpp has no
+// sound calls in it, same reasoning as the other two engines).
+static SnakeRunState snakePrevState = SNAKE_COUNTDOWN;
+static int snakePrevScore = 0;
+
+static void snakeEnter() {
+  initSnakeGame();
+  snakePrevState = SNAKE_COUNTDOWN;
+  snakePrevScore = 0;
+  showSnakeFrame();
+}
+
+static void snakeStep() {
+  updateSnakeFrame();  // already throttles itself to GAME_FRAME_INTERVAL_MS
+
+  const SnakeSnapshot& snap = getSnakeSnapshot();
+  if (snap.state == SNAKE_OVER_FLASH && snakePrevState != SNAKE_OVER_FLASH) {
+    // Last life just lost - alarm rings for the whole flash window, same
+    // as Dino's/Whack's.
+    playGameOverAlarm();
+  } else if (snap.state == SNAKE_HIT_FLASH && snakePrevState != SNAKE_HIT_FLASH) {
+    // Non-fatal hit - lives dropped but the run isn't over.
+    playGameMiss();
+  } else if (snap.score > snakePrevScore) {
+    // Ate food - reuse the existing high-pitched "jump" tone, same reuse
+    // precedent as Whack's hit sound.
+    playGameJump();
+  }
+  snakePrevState = snap.state;
+  snakePrevScore = snap.score;
+}
+
+static void snakeOnShortPress() {
+  if (isSnakeGameOver()) {
+    snakeRestart();
+    snakePrevState = SNAKE_COUNTDOWN;
+    snakePrevScore = 0;
+    showSnakeFrame();
+    return;
+  }
+  snakeTogglePause();
+  showSnakeFrame();  // redraw immediately so the PAUSED overlay shows without waiting for the next throttled tick
+}
+
+static void snakeOnRotate(int direction) {
+  snakeQueueTurn(direction);
+  // No immediate redraw here (unlike Whack's cursor) - a queued turn has
+  // no visible effect until the next tick fires anyway, so there's nothing
+  // new to show yet.
+}
+
+static int snakeBestScore() {
+  return getSnakeSnapshot().bestScore;
+}
+
 // ---- Not implemented yet ----
 // Selectable in the menu, but `implemented: false` means DeskMate.ino never
 // actually calls these - kept as real no-ops rather than nullptr just so
@@ -144,6 +203,6 @@ static int stubBestScore() { return 0; }
 const Game GAMES[GAME_COUNT] = {
   { "Dino Jump",    true,  dinoEnter,  dinoStep,  dinoOnShortPress,  dinoOnRotate,  dinoBestScore },
   { "Whack-a-mole", true,  whackEnter, whackStep, whackOnShortPress, whackOnRotate, whackBestScore },
-  { "Snake",        false, stubEnter,  stubStep,  stubOnShortPress,  stubOnRotate,  stubBestScore },
+  { "Snake",        true,  snakeEnter, snakeStep, snakeOnShortPress, snakeOnRotate, snakeBestScore },
   { "Tetris",       false, stubEnter,  stubStep,  stubOnShortPress,  stubOnRotate,  stubBestScore },
 };

@@ -11,6 +11,7 @@
 #include "Config.h"
 #include "GameEngine.h"
 #include "WhackEngine.h"
+#include "SnakeEngine.h"
 #include "Game.h"
 
 // NOTE: if the 1.3" OLED turns out to use a different controller chip than
@@ -1651,6 +1652,211 @@ void updateMoleFrame() {
   lastMoleFrameMs = now;
   stepMoleGame();
   showMoleFrame();
+}
+
+// ---- Snake ----
+// Same "physics/state has zero display code" split as Dino/Whack above -
+// SnakeEngine.cpp never touches `display` directly.
+
+// Playfield sits below a permanent HUD strip - unlike Whack's corner
+// overlay, Snake's playfield can occupy any cell on screen, so score text
+// needs a reserved strip rather than a corner it might grow into.
+static const int SNAKE_ORIGIN_Y = SNAKE_HUD_HEIGHT_PX;
+
+static void snakeCellToPx(const SnakeCell& c, int& outX, int& outY) {
+  outX = c.x * SNAKE_CELL_PX;
+  outY = SNAKE_ORIGIN_Y + c.y * SNAKE_CELL_PX;
+}
+
+// Distinct from the body: near-full cell, two punched-out (black) eye
+// pixels on the leading edge - same "cut a dot out of a filled shape" idea
+// as drawGameDino()'s eye - so the head reads unambiguously even at 8px.
+static void drawSnakeHead(int px, int py, SnakeDirection heading) {
+  display.fillRoundRect(px, py, SNAKE_CELL_PX, SNAKE_CELL_PX, 2, SSD1306_WHITE);
+  int ex1, ey1, ex2, ey2;
+  switch (heading) {
+    case SNAKE_UP:    ex1 = px + 2; ey1 = py + 2; ex2 = px + 5; ey2 = py + 2; break;
+    case SNAKE_DOWN:  ex1 = px + 2; ey1 = py + 5; ex2 = px + 5; ey2 = py + 5; break;
+    case SNAKE_LEFT:  ex1 = px + 2; ey1 = py + 2; ex2 = px + 2; ey2 = py + 5; break;
+    default:          ex1 = px + 5; ey1 = py + 2; ex2 = px + 5; ey2 = py + 5; break;  // SNAKE_RIGHT
+  }
+  display.drawPixel(ex1, ey1, SSD1306_BLACK);
+  display.drawPixel(ex2, ey2, SSD1306_BLACK);
+}
+
+// Tapers with distance from the head - thickness shrinks every couple of
+// segments, floored at a small stub, so the last couple of segments read
+// as "about to vanish" visually before SnakeEngine.cpp's tail-forgiveness
+// rule treats them that way mechanically too.
+static void drawSnakeBodySegment(int px, int py, int indexFromHead) {
+  int thickness = SNAKE_CELL_PX - (indexFromHead / 2);
+  if (thickness < 2) thickness = 2;
+  int inset = (SNAKE_CELL_PX - thickness) / 2;
+  display.fillRoundRect(px + inset, py + inset, thickness, thickness, 1, SSD1306_WHITE);
+}
+
+// Small dot, deliberately smaller than a body segment so it's unambiguous
+// at a glance which is which.
+static void drawSnakeFood(int px, int py) {
+  display.fillCircle(px + SNAKE_CELL_PX / 2, py + SNAKE_CELL_PX / 2, 2, SSD1306_WHITE);
+}
+
+static void drawSnakeHud(int score, int lives) {
+  display.setCursor(2, 0);
+  display.print(score);
+  drawLivesPips(lives);  // reused as-is from Dino's section - already generic on `lives`
+}
+
+// Faint reference grid - a single pixel at every cell corner, like graph
+// paper. The SSD1306 is a true 1-bit panel (no dim "off" glow some other
+// OLEDs show), so an otherwise pure-black playfield has zero texture to
+// navigate by - especially disorienting right before a wraparound edge.
+// Sparse on purpose (single pixels, not lines) so it reads as a texture,
+// not a drawn grid, and doesn't compete visually with the snake/food.
+static void drawSnakeGrid() {
+  for (int gx = 0; gx <= SNAKE_GRID_COLS; gx++) {
+    int px = gx * SNAKE_CELL_PX;
+    if (px > OLED_WIDTH - 1) px = OLED_WIDTH - 1;  // last column lands exactly on the right edge
+    for (int gy = 0; gy <= SNAKE_GRID_ROWS; gy++) {
+      int py = SNAKE_ORIGIN_Y + gy * SNAKE_CELL_PX;
+      if (py > OLED_HEIGHT - 1) py = OLED_HEIGHT - 1;  // last row lands exactly on the bottom edge
+      display.drawPixel(px, py, SSD1306_WHITE);
+    }
+  }
+}
+
+static void drawSnakeBoard(const SnakeSnapshot& snap) {
+  drawSnakeGrid();
+
+  int fx, fy;
+  snakeCellToPx(snap.food, fx, fy);
+  drawSnakeFood(fx, fy);
+
+  for (int i = snap.length - 1; i >= 1; i--) {  // tail-to-neck, so the head paints over any visual overlap
+    int sx, sy;
+    snakeCellToPx(snap.segments[i], sx, sy);
+    drawSnakeBodySegment(sx, sy, i);
+  }
+  int hx, hy;
+  snakeCellToPx(snap.segments[0], hx, hy);
+  drawSnakeHead(hx, hy, snap.heading);
+}
+
+static void drawSnakeCountdown(const SnakeSnapshot& snap) {
+  char buf[16];
+  if (snap.countdownShowWords) {
+    const char* word = snap.countdownValue == 2 ? "READY" : (snap.countdownValue == 1 ? "SET" : "GO");
+    snprintf(buf, sizeof(buf), "%s\n%d", word, snap.countdownValue);
+    printCentered(buf, SNAKE_ORIGIN_Y, OLED_HEIGHT, 12);
+  } else {
+    // Post-hit recountdown - numbers only, no words. Shows the literal
+    // "3, 2, 1" the plan asks for (countdownValue+1), unlike the raw
+    // 2/1/0 shown as decoration under a word above - here the number *is*
+    // the entire visible content, so it needs to read right on its own.
+    snprintf(buf, sizeof(buf), "%d", snap.countdownValue + 1);
+    printCentered(buf, SNAKE_ORIGIN_Y, OLED_HEIGHT, 16);
+  }
+}
+
+static void drawSnakeOverScreen(const SnakeSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  char buf[64];
+  snprintf(buf, sizeof(buf), "GAME OVER\n\nscore: %d\nbest: %d\n\npress to retry",
+           snap.score, snap.bestScore);
+  printCentered(buf, 2, OLED_HEIGHT - 2, 9);
+  display.display();
+}
+
+static void drawSnakePlayScene(const SnakeSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  drawSnakeBoard(snap);
+  drawSnakeHud(snap.score, snap.lives);
+
+  if (snap.state == SNAKE_PAUSED) {
+    printCentered("PAUSED", SNAKE_ORIGIN_Y, OLED_HEIGHT, 12);
+  } else if (snap.state == SNAKE_COUNTDOWN || snap.state == SNAKE_RECOUNTDOWN) {
+    drawSnakeCountdown(snap);
+  }
+  // SNAKE_RUNNING: board + HUD only, no overlay.
+
+  display.display();
+}
+
+// Frozen play-scene with a blinking "HIT!" box - shown for
+// SNAKE_HIT_FLASH_DURATION_MS right after a non-fatal self-collision,
+// before stepSnakeGame() retreats the snake and hands off to
+// SNAKE_RECOUNTDOWN. Smaller/snappier box than the fatal one below - this
+// is a "shake it off" beat, not the end of the run.
+static void drawSnakeHitFlashScene(const SnakeSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  drawSnakeBoard(snap);
+  drawSnakeHud(snap.score, snap.lives);
+
+  bool blinkOn = (millis() / GAME_OVER_FLASH_BLINK_MS) % 2 == 0;
+  if (blinkOn) {
+    const int boxW = 40, boxH = 14;
+    const int boxX = (OLED_WIDTH - boxW) / 2;
+    const int boxY = (OLED_HEIGHT - boxH) / 2;
+    display.fillRect(boxX, boxY, boxW, boxH, SSD1306_BLACK);
+    display.drawRect(boxX, boxY, boxW, boxH, SSD1306_WHITE);
+    printCentered("HIT!", boxY, boxY + boxH, 9);
+  }
+
+  display.display();
+}
+
+// Same structure as Dino's/Whack's fatal flash screen - duplicated rather
+// than shared, same reasoning as those two.
+static void drawSnakeOverFlashScene(const SnakeSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  drawSnakeBoard(snap);
+  drawSnakeHud(snap.score, snap.lives);
+
+  bool blinkOn = (millis() / GAME_OVER_FLASH_BLINK_MS) % 2 == 0;
+  if (blinkOn) {
+    const int boxW = 76, boxH = 22;
+    const int boxX = (OLED_WIDTH - boxW) / 2;
+    const int boxY = (OLED_HEIGHT - boxH) / 2;
+    display.fillRect(boxX, boxY, boxW, boxH, SSD1306_BLACK);
+    display.drawRect(boxX, boxY, boxW, boxH, SSD1306_WHITE);
+    printCentered("GAME OVER", boxY, boxY + boxH, 9);
+  }
+
+  display.display();
+}
+
+void showSnakeFrame() {
+  const SnakeSnapshot& snap = getSnakeSnapshot();
+  if (snap.state == SNAKE_OVER) {
+    drawSnakeOverScreen(snap);
+  } else if (snap.state == SNAKE_OVER_FLASH) {
+    drawSnakeOverFlashScene(snap);
+  } else if (snap.state == SNAKE_HIT_FLASH) {
+    drawSnakeHitFlashScene(snap);
+  } else {
+    drawSnakePlayScene(snap);  // RUNNING, PAUSED, COUNTDOWN, RECOUNTDOWN
+  }
+}
+
+static unsigned long lastSnakeFrameMs = 0;
+
+void updateSnakeFrame() {
+  unsigned long now = millis();
+  if (now - lastSnakeFrameMs < GAME_FRAME_INTERVAL_MS) return;
+  lastSnakeFrameMs = now;
+  stepSnakeGame();
+  showSnakeFrame();
 }
 
 static char lastNightTimeStr[8] = "";

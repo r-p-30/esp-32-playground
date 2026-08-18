@@ -3,13 +3,51 @@
 #include <ArduinoJson.h>
 #include <string.h>
 #include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "RemoteControl.h"
 #include "Cards.h"
 #include "Config.h"
 #include "RemoteApi.h"
 
+// ---- Networking task (core 0) ----
+// WebSocketsClient::loop() can block for a long time on a bad connection -
+// in particular the TCP/TLS connect it does on every reconnect attempt has
+// no short bound, so a flaky link to the site could stall this call for
+// many seconds. That used to run inline in DeskMate.ino's loop(), meaning
+// a bad remote connection could freeze the encoder/game/buzzer for however
+// long that one call took (this is what turned out to be causing
+// "random" game freezes - see the reconnect-churn pattern in
+// docs/remote-api-spec.md's history/commit log around this change).
+//
+// Fix: the WebSocketsClient itself, and everything that can block on it,
+// now lives entirely on its own FreeRTOS task pinned to the second core -
+// see beginRemoteControl(). It can block all it wants without touching
+// anything input-driven. Only two things cross between the two tasks, both
+// guarded by wsMutex: the latest raw text frame received from the site
+// (incomingMessage) and the next one this task should send
+// (outgoingMessage), plus a justConnected flag. Every other piece of
+// state below (applyStateJson()'s parsing/Cards.cpp mutation, the
+// pending-* flags, sendCardsReport()'s JSON building) stays exclusively on
+// the main-loop task, completely unchanged from before this split - only
+// the raw socket I/O moved.
 static WebSocketsClient webSocket;
 static bool wsStarted = false;
+static SemaphoreHandle_t wsMutex = nullptr;
+
+static String incomingMessage;
+static bool hasIncomingMessage = false;
+static String outgoingMessage;
+static bool hasOutgoingMessage = false;
+static bool justConnected = false;
+
+// Bounded wait on the main-loop side - the critical sections below are all
+// just copying a String/bool, so this should never actually get close to
+// timing out; it's a safety ceiling, not a real budget, so the main loop
+// can never be blocked on this mutex for long even in a pathological case.
+#define WS_MUTEX_WAIT_MS  20
+
 static unsigned long lastHeartbeatSentMs = 0;
 
 static long lastAppliedRevision = -1;
@@ -64,6 +102,18 @@ static bool remoteApiConfigured() {
   return strcmp(REMOTE_API_URL, "wss://your-site.example/ws/device") != 0;
 }
 
+// Hands msg off to the network task to actually send - only that task
+// touches `webSocket` directly (see remoteControlTask()), so every send
+// from the main-loop side goes through here instead of calling
+// webSocket.sendTXT() itself.
+static void queueOutgoing(const String& msg) {
+  if (xSemaphoreTake(wsMutex, pdMS_TO_TICKS(WS_MUTEX_WAIT_MS)) == pdTRUE) {
+    outgoingMessage = msg;
+    hasOutgoingMessage = true;
+    xSemaphoreGive(wsMutex);
+  }
+}
+
 static TextAlignH parseAlignH(const char* s) {
   if (s == nullptr) return ALIGN_H_CENTER;
   if (strcmp(s, "left") == 0) return ALIGN_H_LEFT;
@@ -78,6 +128,9 @@ static TextAlignV parseAlignV(const char* s) {
   return ALIGN_V_MIDDLE;
 }
 
+// Unchanged from before the task split - still only ever called from the
+// main-loop task (loopRemoteControl() below), just now fed by the mailbox
+// instead of directly by onWsEvent().
 static void applyStateJson(const uint8_t* payload, size_t length) {
   StaticJsonDocument<512> doc;
   if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
@@ -198,7 +251,10 @@ static const char* alignVToString(TextAlignV v) {
 // server push, so it always reflects the last one that landed, and it
 // survives things that can wipe the site's disk (a redeploy, an idle
 // restart on free hosting). The server treats this as authoritative and
-// overwrites its local cache with it - see /ws/device in app.py.
+// overwrites its local cache with it - see /ws/device in app.py. Still
+// only ever called from the main-loop task (reads Cards.cpp, same as
+// before) - just hands its output to queueOutgoing() instead of sending
+// it directly.
 static void sendCardsReport() {
   JsonDocument doc;
   JsonArray arr = doc["cardsReport"].to<JsonArray>();
@@ -219,31 +275,45 @@ static void sendCardsReport() {
   }
   String out;
   serializeJson(doc, out);
-  webSocket.sendTXT(out);
+  queueOutgoing(out);
 }
 
+// Runs on the network task (core 0) - only touches the wsMutex-guarded
+// mailbox, never Cards.cpp or the pending-* flags directly, so it can't
+// race the main-loop task.
 static void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_TEXT:
-      applyStateJson(payload, length);
+      if (xSemaphoreTake(wsMutex, pdMS_TO_TICKS(WS_MUTEX_WAIT_MS)) == pdTRUE) {
+        incomingMessage = String(payload, length);
+        hasIncomingMessage = true;
+        xSemaphoreGive(wsMutex);
+      }
       break;
     case WStype_CONNECTED:
-      Serial.println("Remote control connected.");
-      sendCardsReport();
+      Serial.printf("Remote control connected. Free heap: %u bytes\n", ESP.getFreeHeap());
+      if (xSemaphoreTake(wsMutex, pdMS_TO_TICKS(WS_MUTEX_WAIT_MS)) == pdTRUE) {
+        justConnected = true;
+        xSemaphoreGive(wsMutex);
+      }
       break;
     case WStype_DISCONNECTED:
-      Serial.println("Remote control disconnected - will auto-retry.");
+      Serial.printf("Remote control disconnected - will auto-retry. Free heap: %u bytes\n", ESP.getFreeHeap());
       break;
     default:
       break;
   }
 }
 
-void beginRemoteControl() {
-  if (wsStarted || !remoteApiConfigured()) return;
-
-  String host, path;
-  if (!splitWsUrl(REMOTE_API_URL, host, path)) return;
+// The network task's body - owns `webSocket` exclusively from here on.
+// Loops forever: pumps the socket (this is the call that can block for a
+// while on a bad connection - now harmless, since nothing else depends on
+// this task running promptly), then ships out anything the main-loop task
+// queued via queueOutgoing(). vTaskDelay(1) is just a yield so this task
+// doesn't starve lower-priority tasks/the idle-task watchdog on its core
+// during a tight reconnect loop.
+static void remoteControlTask(void* pvParameters) {
+  (void)pvParameters;
 
   static String extraHeaders = String("X-Device-Key: ") + REMOTE_API_KEY;
   webSocket.setExtraHeaders(extraHeaders.c_str());
@@ -253,12 +323,53 @@ void beginRemoteControl() {
   // timeout that never sends a clean close) gets noticed and reconnected
   // instead of silently going stale for a permanent connection.
   webSocket.enableHeartbeat(15000, 3000, 2);
+
+  String host, path;
+  splitWsUrl(REMOTE_API_URL, host, path);  // already validated in beginRemoteControl() before this task was spawned
   webSocket.beginSSL(host.c_str(), 443, path.c_str());
+
+  for (;;) {
+    webSocket.loop();
+
+    String toSend;
+    bool shouldSend = false;
+    if (xSemaphoreTake(wsMutex, pdMS_TO_TICKS(WS_MUTEX_WAIT_MS)) == pdTRUE) {
+      if (hasOutgoingMessage) {
+        toSend = outgoingMessage;
+        hasOutgoingMessage = false;
+        shouldSend = true;
+      }
+      xSemaphoreGive(wsMutex);
+    }
+    if (shouldSend) {
+      webSocket.sendTXT(toSend);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
+
+void beginRemoteControl() {
+  if (wsStarted || !remoteApiConfigured()) return;
+
+  String host, path;
+  if (!splitWsUrl(REMOTE_API_URL, host, path)) return;
+
+  wsMutex = xSemaphoreCreateMutex();
+  if (wsMutex == nullptr) return;  // out of memory - stay offline rather than risk an unguarded mailbox
+
   wsStarted = true;
+  // Core 0 - Arduino's own setup()/loop() task runs on core 1
+  // (CONFIG_ARDUINO_RUNNING_CORE), so this fully separates network I/O
+  // from the input/game loop, not just logically but physically. 8KB
+  // stack - WebSocketsClient + the TLS handshake it does under beginSSL()
+  // is fairly stack-hungry; the default loop task's stack wouldn't be a
+  // fair comparison since this task does nothing but this.
+  xTaskCreatePinnedToCore(remoteControlTask, "RemoteWS", 8192, nullptr, 1, nullptr, 0);
 }
 
 static void sendHeartbeatIfDue(int currentCard, bool nightModeActive, bool inGameMode, int activeGame) {
-  if (!wsStarted || !webSocket.isConnected()) return;
+  if (!wsStarted) return;
 
   unsigned long now = millis();
   if (lastHeartbeatSentMs != 0 && (now - lastHeartbeatSentMs) < REMOTE_HEARTBEAT_INTERVAL_MS) {
@@ -274,12 +385,39 @@ static void sendHeartbeatIfDue(int currentCard, bool nightModeActive, bool inGam
            inGameMode ? "true" : "false",
            activeGame,
            millis() / 1000UL);
-  webSocket.sendTXT(body);
+  queueOutgoing(body);
 }
 
 void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode, int activeGame) {
   if (!wsStarted) return;
-  webSocket.loop();
+
+  // Drain anything the network task queued up since our last visit -
+  // applyStateJson()/sendCardsReport() both stay on this (main-loop) task,
+  // completely unchanged from before the task split, they're just fed by
+  // the mailbox instead of being called directly from onWsEvent().
+  String incoming;
+  bool hadIncoming = false;
+  bool connectedJustNow = false;
+  if (xSemaphoreTake(wsMutex, pdMS_TO_TICKS(WS_MUTEX_WAIT_MS)) == pdTRUE) {
+    if (hasIncomingMessage) {
+      incoming = incomingMessage;
+      hasIncomingMessage = false;
+      hadIncoming = true;
+    }
+    if (justConnected) {
+      justConnected = false;
+      connectedJustNow = true;
+    }
+    xSemaphoreGive(wsMutex);
+  }
+
+  if (connectedJustNow) {
+    sendCardsReport();
+  }
+  if (hadIncoming) {
+    applyStateJson((const uint8_t*)incoming.c_str(), incoming.length());
+  }
+
   sendHeartbeatIfDue(currentCard, nightModeActive, inGameMode, activeGame);
 }
 
@@ -287,7 +425,8 @@ void forceHeartbeatNow() {
   // 0 is sendHeartbeatIfDue()'s own "never sent yet" sentinel, which skips
   // the interval check entirely - reusing it here is what makes the next
   // loopRemoteControl() call send right away instead of waiting out
-  // REMOTE_HEARTBEAT_INTERVAL_MS.
+  // REMOTE_HEARTBEAT_INTERVAL_MS. Only ever touched by the main-loop task
+  // (same as before the task split), so no locking needed here.
   lastHeartbeatSentMs = 0;
 }
 

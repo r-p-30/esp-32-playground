@@ -37,6 +37,11 @@ void updateGameFrame();
 void showMoleFrame();
 void updateMoleFrame();
 
+// Same pair of calls as showGameFrame()/showMoleFrame() above, but for the
+// snake game mode (SnakeEngine.h).
+void showSnakeFrame();
+void updateSnakeFrame();
+
 // Dims the display and shows the full-screen inverted clock. Call once
 // when entering; call renderNightMode() every loop() iteration after
 // that (it only actually redraws when the displayed minute changes).

@@ -54,6 +54,24 @@ body {
 
 ::selection { background: rgba(var(--accent-rgb), 0.35); }
 
+/* ---- Scrollbars: a thin flat line instead of the bulky OS default ---- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
 a { color: var(--accent); }
 
 :focus-visible {
@@ -558,8 +576,13 @@ button:disabled {
 }
 
 .toggle {
-  position: relative;
+  /* .toggle is a <label> - reset the generic label rule's block display
+     and margin-top (meant for the text-above-field pattern) so the
+     switch centers inline with its sibling text instead of dropping
+     below it. */
   display: inline-block;
+  margin-top: 0;
+  position: relative;
   cursor: pointer;
   flex-shrink: 0;
 }

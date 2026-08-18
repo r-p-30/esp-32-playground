@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <esp_system.h>
 #include "Config.h"
 #include "Cards.h"
 #include "DisplayUI.h"
@@ -113,8 +114,31 @@ static void setNightMode(bool active) {
   forceHeartbeatNow();  // see enterGameMenu()'s comment
 }
 
+// Human label for esp_reset_reason() - printed first thing in setup(),
+// before anything that could itself fail, so if the board is silently
+// rebooting (watchdog, brownout, panic) instead of just losing WiFi, the
+// very next boot's log says why instead of us guessing. RTC-backed, so it
+// survives the reset that caused it.
+static const char* resetReasonLabel(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON:   return "power-on";
+    case ESP_RST_EXT:       return "external pin";
+    case ESP_RST_SW:        return "software (esp_restart)";
+    case ESP_RST_PANIC:     return "PANIC (crash)";
+    case ESP_RST_INT_WDT:   return "interrupt watchdog";
+    case ESP_RST_TASK_WDT:  return "task watchdog (loop() stalled too long)";
+    case ESP_RST_WDT:       return "other watchdog";
+    case ESP_RST_BROWNOUT:  return "brownout (power sag)";
+    case ESP_RST_SDIO:      return "SDIO";
+    default:                return "unknown/other";
+  }
+}
+
 void setup() {
   Serial.begin(115200);
+  Serial.print("Reset reason: ");
+  Serial.println(resetReasonLabel(esp_reset_reason()));
+  Serial.printf("Free heap at boot: %u bytes\n", ESP.getFreeHeap());
 
   initBuzzer();
   initEncoder();

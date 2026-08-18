@@ -5,19 +5,34 @@
 // poll/disconnect cycle - the device is USB-powered now, so WiFi and this
 // socket both just stay up for the device's entire runtime. The server
 // pushes a fresh state JSON the instant something changes on the site
-// (buzz, card edit, etc.) - no polling delay. Call beginRemoteControl()
-// once after WiFi connects (see DeskMate.ino's setup()), then
-// loopRemoteControl() every loop() iteration - both are safe no-ops if
-// RemoteApi.h still has its placeholder URL.
+// (buzz, card edit, etc.) - no polling delay.
+//
+// The actual socket I/O runs on its own FreeRTOS task pinned to the
+// second core (see RemoteControl.cpp) - a flaky connection can make
+// WebSocketsClient block for a long time (in particular the TCP/TLS
+// connect on every reconnect attempt), and that used to stall this whole
+// call, which meant a bad remote connection could freeze the
+// encoder/game/buzzer along with it. Now that task can block all it wants
+// without touching anything input-driven; only a small mutex-guarded
+// mailbox crosses between the two tasks. None of that is visible from
+// this header - beginRemoteControl()/loopRemoteControl() are called
+// exactly the same way as before this split.
+//
+// Call beginRemoteControl() once after WiFi connects (see DeskMate.ino's
+// setup()), then loopRemoteControl() every loop() iteration - both are
+// safe no-ops if RemoteApi.h still has its placeholder URL.
 void beginRemoteControl();
 
-// Pumps the WebSocket connection (processes incoming pushes, handles
-// reconnects) and sends a small periodic heartbeat over the same socket
-// so the site can show "last seen" (REMOTE_HEARTBEAT_INTERVAL_MS in
-// Config.h). Cheap and non-blocking - call every loop() iteration
-// regardless of WiFi state. activeGame is whatever GAMES[] index is
-// currently selected (Game.h) - reported so the site can highlight which
-// game is playing right now, same reasoning as currentCard for cards.
+// Drains anything the network task received since the last call (applying
+// state pushes, resyncing the card report on a fresh connect) and queues
+// a periodic heartbeat for it to send (REMOTE_HEARTBEAT_INTERVAL_MS in
+// Config.h so the site can show "last seen"). Cheap and non-blocking -
+// call every loop() iteration regardless of WiFi state; this call itself
+// never touches the socket directly, so it can't be the thing that blocks
+// (see the task-split note above). activeGame is whatever GAMES[] index
+// is currently selected (Game.h) - reported so the site can highlight
+// which game is playing right now, same reasoning as currentCard for
+// cards.
 void loopRemoteControl(int currentCard, bool nightModeActive, bool inGameMode, int activeGame);
 
 // Returns the card index to jump to if a new remote update arrived since
