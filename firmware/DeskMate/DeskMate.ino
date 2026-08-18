@@ -287,14 +287,25 @@ void loop() {
   }
 
   // A specific game picked from the site's game list - jumps straight into
-  // it (skipping the picker menu), and fires on every new selection
-  // regardless of whether game mode was already on, so this also covers
-  // "swap the active game while one's already running." Same implemented-
-  // only guard as enterSelectedGame() (a stub selection from the site is a
-  // no-op, not a launch into a blank screen).
+  // it (skipping the picker menu) and fires on every new selection, so this
+  // also covers "swap the active game while one's already running." Same
+  // implemented-only guard as enterSelectedGame() (a stub selection from
+  // the site is a no-op, not a launch into a blank screen).
+  //
+  // Deliberately does NOT flip the device into game mode on its own -
+  // mode != MODE_CARDS requires the user to have already long-pressed into
+  // the picker menu (or already be mid-game) themselves before a remote
+  // pick does anything. Site-triggered picks used to jump straight from
+  // cards (or even silently no-op mid-night-mode while the site's own
+  // gameModeEnabled flag still flipped true, leaving site and device
+  // state disagreeing) - the site no longer sends that flag alongside a
+  // pick at all (see action_game_select() in site/app.py), and this guard
+  // is what actually enforces "remote can only choose *which* game while
+  // the human's already chosen to be in game mode," not turn game mode on
+  // by itself.
   int remoteGameSelect = consumeRemoteGameSelect();
   if (remoteGameSelect >= 0 && remoteGameSelect < GAME_COUNT &&
-      GAMES[remoteGameSelect].implemented && !nightModeActive) {
+      GAMES[remoteGameSelect].implemented && mode != MODE_CARDS && !nightModeActive) {
     mode = MODE_GAME;
     selectedGame = remoteGameSelect;
     GAMES[selectedGame].enter();
