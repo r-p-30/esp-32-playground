@@ -48,8 +48,8 @@ truth when they disagree.
   card text/alignment/corner emoji, emoji-shortcode animations, buzz/
   identify/trigger-animation, carousel, night mode, game mode (including
   launching a specific game remotely).
-- 6 real games implemented (`Games.cpp` + each game's own `*Engine.cpp`):
-  Dino Jump, Whack-a-mole, Snake, Tetris, Car Racing, Tic-Tac-Toe — see
+- 5 real games implemented (`Games.cpp` + each game's own `*Engine.cpp`):
+  Dino Jump, Whack-a-mole, Snake, Tetris, Car Racing — see
   `docs/game-mode-plan.md`. One picker slot is still a reserved
   stub ("Tank Battle (soon)"); Tank Battle and a deferred Tank Arena are
   specced but not implemented yet.

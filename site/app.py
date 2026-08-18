@@ -52,12 +52,11 @@ GAMES = [
     {"index": 2, "name": "Snake", "implemented": True},
     {"index": 3, "name": "Tetris", "implemented": True},
     {"index": 4, "name": "Car Racing", "implemented": True},
-    {"index": 5, "name": "Tic-Tac-Toe", "implemented": True},
-    # Reserved slot (Game.h's GAME_SLOT_7) - not implemented yet. Named for
+    # Reserved slot (Game.h's GAME_SLOT_6) - not implemented yet. Named for
     # its leading candidate (docs/brick-game-plan.md's Tank Battle) so the
     # menu reads "Tank Battle (soon)" instead of a placeholder number -
     # still a stub until it's actually built.
-    {"index": 6, "name": "Tank Battle", "implemented": False},
+    {"index": 5, "name": "Tank Battle", "implemented": False},
 ]
 
 

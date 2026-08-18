@@ -14,7 +14,6 @@
 #include "SnakeEngine.h"
 #include "TetrisEngine.h"
 #include "RacingEngine.h"
-#include "TicTacToeEngine.h"
 #include "Game.h"
 
 // NOTE: if the 1.3" OLED turns out to use a different controller chip than
@@ -54,6 +53,59 @@ static void printCentered(const char* text, int yTop, int yBottom, int lineHeigh
     uint16_t w, h;
     display.getTextBounds(lineBuf, 0, y, &x1, &y1, &w, &h);
     int x = (OLED_WIDTH - (int)w) / 2;
+    if (x < 0) x = 0;
+    display.setCursor(x, y);
+    display.print(lineBuf);
+
+    y += lineHeight;
+    if (!nl) break;
+    lineStart = nl + 1;
+  }
+}
+
+// Same centering logic as printCentered() above, for use while
+// display.setRotation(1) is active - Tetris/Racing's countdown, PAUSED,
+// GAME OVER flash box, and live score all call this instead, so that
+// text visually matches the 90-degree-rotated board those two games
+// already draw (same clockwise rotation direction as racingCellToPx()/
+// tetrisCellToPx() use, verified against Adafruit_SSD1306's own rotation
+// remap: rotation 1 turns "text advancing rightward" into "advancing
+// downward on the physical screen," i.e. content rotates clockwise, same
+// as the board). Only the horizontal-centering axis differs from
+// printCentered() - it centers against OLED_HEIGHT (64), the *logical*
+// width Adafruit_GFX reports while rotated 90 degrees, not the physical
+// OLED_WIDTH (128) printCentered() uses for the unrotated screens (resting
+// score cards, Dino/Snake/Whack, etc. - those are untouched, still call
+// printCentered() at rotation 0). Caller is responsible for setting
+// rotation(1) before calling this and rotation(0) back right after -
+// scoped as tightly as possible around just the overlay text, since
+// rotation is mutable state on the shared `display` object and every
+// other screen in the app assumes it's 0.
+static void printCenteredRotated(const char* text, int yTop, int yBottom, int lineHeight) {
+  int numLines = 1;
+  for (const char* p = text; *p; p++) {
+    if (*p == '\n') numLines++;
+  }
+
+  int blockHeight = numLines * lineHeight;
+  int y = yTop + ((yBottom - yTop) - blockHeight) / 2;
+  if (y < yTop) y = yTop;
+
+  const char* lineStart = text;
+
+  while (*lineStart) {
+    const char* nl = strchr(lineStart, '\n');
+    int len = nl ? (int)(nl - lineStart) : (int)strlen(lineStart);
+
+    char lineBuf[48];
+    int copyLen = len < (int)sizeof(lineBuf) - 1 ? len : (int)sizeof(lineBuf) - 1;
+    memcpy(lineBuf, lineStart, copyLen);
+    lineBuf[copyLen] = '\0';
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(lineBuf, 0, y, &x1, &y1, &w, &h);
+    int x = (OLED_HEIGHT - (int)w) / 2;  // OLED_HEIGHT (64) is the rotated logical width
     if (x < 0) x = 0;
     display.setCursor(x, y);
     display.print(lineBuf);
@@ -1409,22 +1461,26 @@ void showGameFrame() {
   }
 }
 
-// One dot per page, right edge of the screen, current page filled - same
+// One dot per page, bottom-right corner, laid out horizontally (this
+// task's explicit ask - was a vertical stack centered on the right edge;
+// pagination dots conventionally sit at the bottom of the screen, and
+// horizontal keeps them in the same reading orientation as the game-name
+// text rather than sideways), current page filled - same
 // filled-vs-hollow-circle visual language as drawLivesPips()/drawMissPips()
 // elsewhere in game mode. Only drawn once there's more than one page to
 // begin with (GAME_COUNT <= GAME_MENU_ROWS_PER_PAGE never needs this, same
 // as it never needed paging at all before GAME_SLOT_5/6 existed).
 static void drawGameMenuPageDots(int totalPages, int currentPage) {
   if (totalPages <= 1) return;
-  const int dotX = OLED_WIDTH - 3;
+  const int dotY = OLED_HEIGHT - 4;
   const int spacing = 6;
-  const int startY = (OLED_HEIGHT - (totalPages - 1) * spacing) / 2;
+  const int startX = OLED_WIDTH - 4 - (totalPages - 1) * spacing;
   for (int p = 0; p < totalPages; p++) {
-    int y = startY + p * spacing;
+    int x = startX + p * spacing;
     if (p == currentPage) {
-      display.fillCircle(dotX, y, 2, SSD1306_WHITE);
+      display.fillCircle(x, dotY, 2, SSD1306_WHITE);
     } else {
-      display.drawCircle(dotX, y, 2, SSD1306_WHITE);
+      display.drawCircle(x, dotY, 2, SSD1306_WHITE);
     }
   }
 }
@@ -1454,11 +1510,6 @@ void showGameMenu(int selectedIndex) {
   int pageEnd = pageStart + GAME_MENU_ROWS_PER_PAGE;
   if (pageEnd > GAME_COUNT) pageEnd = GAME_COUNT;
 
-  // Page dots (if any) eat a few pixels off the right edge - only shrink
-  // the "(soon)" fit budget when they're actually on screen, so single-page
-  // menus keep exactly the margin they always had.
-  const int rightMargin = (totalPages > 1) ? 8 : 2;
-
   for (int i = pageStart; i < pageEnd; i++) {
     int rowTop = (i - pageStart) * rowH;
     int textY = rowTop + (rowH - 8) / 2;  // 8 = size-1 glyph height
@@ -1476,6 +1527,15 @@ void showGameMenu(int selectedIndex) {
       // Only appended if it actually fits next to the name - "can write
       // (coming soon) there if space permits" - so a long name like
       // "Whack-a-mole" just shows bare instead of getting clipped.
+      //
+      // Page dots now live bottom-right, horizontally (drawGameMenuPageDots()
+      // below) - they only encroach on the page's *last* row (the one whose
+      // band actually reaches the bottom of the screen), not the full right
+      // edge the old vertical stack ate into on every row. So the tighter
+      // budget only applies there; every other row keeps the full-width
+      // budget it always had.
+      bool lastRowOnPage = (i - pageStart) == GAME_MENU_ROWS_PER_PAGE - 1;
+      int rightMargin = (totalPages > 1 && lastRowOnPage) ? (6 + totalPages * 6) : 2;
       char withSuffix[40];
       snprintf(withSuffix, sizeof(withSuffix), "%s (soon)", GAMES[i].name);
       int16_t x1, y1;
@@ -1960,16 +2020,33 @@ static void drawTetrisBoard(const TetrisSnapshot& snap) {
 // Best score is deliberately NOT shown here - every other game in this
 // codebase only surfaces best on the resting game-over card
 // (drawTetrisOverScreen() below), not during live play.
+// Rotated (this task's explicit ask) so the score reads consistently with
+// the board's own 90-degree orientation rather than sitting sideways
+// relative to it - see printCenteredRotated()'s comment for the rotation
+// mechanics. Placed at the rotated frame's origin corner (physical
+// top-right) - the tightest-margin corner of an already-tight board
+// (TETRIS_ROW_ORIGIN_PX/TETRIS_COL_ORIGIN_PX are only 4px/2px), so a couple
+// of the board's outermost cells may sit under the digits if a piece
+// happens to be there - same "corner overlay" tradeoff every other game's
+// HUD already makes given how little spare margin a nearly-edge-to-edge
+// board leaves.
 static void drawTetrisScore(int score) {
-  display.setCursor(2, 0);
+  display.setRotation(1);
+  display.setCursor(0, 0);
   display.print(score);
+  display.setRotation(0);
 }
 
 static void drawTetrisCountdown(const TetrisSnapshot& snap) {
   const char* word = snap.countdownValue == 2 ? "READY" : (snap.countdownValue == 1 ? "SET" : "GO");
   char buf[16];
   snprintf(buf, sizeof(buf), "%s\n%d", word, snap.countdownValue);
-  printCentered(buf, 16, 48, 12);  // same band Dino's countdown uses - clear of the board/panel edges either way
+  // Rotated - band is 32..96 out of the rotated frame's 0..OLED_WIDTH(128)
+  // logical height, the same proportional middle-50% band the original
+  // unrotated version used (16..48 out of physical 0..64).
+  display.setRotation(1);
+  printCenteredRotated(buf, 32, 96, 12);
+  display.setRotation(0);
 }
 
 static void drawTetrisPlayScene(const TetrisSnapshot& snap) {
@@ -2012,12 +2089,25 @@ static void drawTetrisOverFlashScene(const TetrisSnapshot& snap) {
 
   bool blinkOn = (millis() / GAME_OVER_FLASH_BLINK_MS) % 2 == 0;
   if (blinkOn) {
-    const int boxW = 76, boxH = 22;
-    const int boxX = (OLED_WIDTH - boxW) / 2;
-    const int boxY = (OLED_HEIGHT - boxH) / 2;
+    // Rotated (this task's explicit ask), same as the score/countdown
+    // above. Box dimensions aren't just swapped 76x22 -> 22x76 the way the
+    // racing car sprite's axes were - the box's *text-advance* dimension
+    // (what was 76px wide when unrotated) now has to fit under the
+    // rotated frame's logical-width cap of OLED_HEIGHT (64), not the
+    // physical OLED_WIDTH (128) it had room for before. "GAME OVER" is
+    // ~54px at this font size, so 58 leaves a few px of padding without
+    // exceeding that 64px ceiling. The box's other dimension (22, the
+    // original box's *height* - just line-height + padding, no text
+    // advances along it) has no such constraint and keeps its original
+    // size.
+    display.setRotation(1);
+    const int boxW = 58, boxH = 22;
+    const int boxX = (OLED_HEIGHT - boxW) / 2;
+    const int boxY = (OLED_WIDTH - boxH) / 2;
     display.fillRect(boxX, boxY, boxW, boxH, SSD1306_BLACK);
     display.drawRect(boxX, boxY, boxW, boxH, SSD1306_WHITE);
-    printCentered("GAME OVER", boxY, boxY + boxH, 9);
+    printCenteredRotated("GAME OVER", boxY, boxY + boxH, 9);
+    display.setRotation(0);
   }
 
   display.display();
@@ -2061,24 +2151,79 @@ static void racingCellToPx(int row, int lane, int& outX, int& outCenterY) {
 }
 
 // Blocky "brick console" car sprite (this task's explicit ask, matching
-// the reference image) - a 2x2 cluster of individually-bordered
-// mini-squares with a 1px gap between them, not one smooth filled shape.
-// Each mini-square is hollow (outline only, background showing through
-// the middle) - same "outline, not fill" language as drawRacingRoad()'s
-// tick-mark borders, so the car and the road read as one consistent
-// style instead of a solid sprite dropped into an all-outline scene.
-// Same sprite for both obstacle cars and the player - the reference photo
-// doesn't distinguish them by shape, only by which one you're steering.
-static void drawRacingCar(int cx, int cy) {
-  const int sq = 5;   // each mini-square's side, px
+// the reference image) - a fixed 4x3 grid of individually-bordered
+// mini-squares (1 = square, 0 = empty) with a 1px gap between them, not
+// one smooth filled shape. Each mini-square is hollow (outline only,
+// background showing through the middle) - same "outline, not fill"
+// language as drawRacingRoad()'s tick-mark borders, so the car and the
+// road read as one consistent style instead of a solid sprite dropped
+// into an all-outline scene. Same sprite for both obstacle cars and the
+// player - the reference photo doesn't distinguish them by shape, only
+// by which one you're steering.
+//
+// Stored pre-transposed into {lane axis}x{travel axis} (3x4) - matrix
+// transpose of the {0,1,0}/{1,1,1}/{0,1,0}/{1,0,1} shape as originally
+// authored, so the render loop below can walk it directly (i -> Y,
+// j -> X) with no index-swapping. Column 0 (all three rows: 0,1,0) is
+// the car's head/nose; column 3 (1,0,1) is the tail. A front/nose only
+// means something along the direction of travel, which is why the
+// head/tail asymmetry has to land on the 4-wide axis - physical X once
+// rotated - not the 3-wide lane axis (Y), which carries no such
+// direction. racingCellToPx() above maps increasing game-row to
+// *decreasing* physical X (row 0/spawn renders near the physical-right
+// edge, the player's row near the physical-left edge - obstacle cars
+// travel leftward, toward the player), so column 0 (the head) has to
+// land at the sprite's minimum-X edge - its leading edge - for the nose
+// to actually point the way the car is moving.
+static const uint8_t RACING_CAR_SHAPE[3][4] = {
+  { 0, 1, 0, 1 },
+  { 1, 1, 1, 0 },
+  { 0, 1, 0, 1 },
+};
+
+// flipped=true mirrors the shape along the travel axis (head lands at
+// the sprite's maximum-X edge instead of minimum-X) - used for the
+// player's own car, which faces the opposite way from every obstacle:
+// obstacles' noses point toward the player (their direction of travel),
+// but the player's car faces back up the road, into oncoming traffic,
+// same as a real car facing the direction it's watching for hazards in
+// rather than the direction it just came from.
+static void drawRacingCar(int cx, int cy, bool flipped) {
+  // Mini-square side - the shape's 3 rows sit on the Y/lane axis (see
+  // RACING_CAR_SHAPE's comment), and a lane is only
+  // RACING_ROAD_WIDTH_PX/RACING_LANES = 20px wide. At sq=4 the sprite's
+  // Y-extent is 3*4 + 2*1 = 14px, comfortably inside the 20px lane with
+  // 3px clearance on each side - enough that two cars in adjacent lanes
+  // at the same row still show a visible gap between them, not a solid
+  // wall. The 4-column X-extent (4*4 + 3*1 = 19px) has no such
+  // constraint - the travel axis runs the OLED's full 128px width.
+  const int sq = 4;   // each mini-square's side, px
   const int gap = 1;  // gap between adjacent mini-squares, px
-  const int total = sq * 2 + gap;
-  int x0 = cx - total / 2;
-  int y0 = cy - total / 2;
-  display.drawRect(x0, y0, sq, sq, SSD1306_WHITE);
-  display.drawRect(x0 + sq + gap, y0, sq, sq, SSD1306_WHITE);
-  display.drawRect(x0, y0 + sq + gap, sq, sq, SSD1306_WHITE);
-  display.drawRect(x0 + sq + gap, y0 + sq + gap, sq, sq, SSD1306_WHITE);
+  const int laneCells = 3, travelCells = 4;  // see RACING_CAR_SHAPE's comment
+  const int totalY = laneCells * sq + (laneCells - 1) * gap;
+  const int totalX = travelCells * sq + (travelCells - 1) * gap;
+  int originX = cx - totalX / 2;  // column 0 (the head) lands here when not flipped - the sprite's leading edge
+  // Clamp on-screen - RACING_ROW_ORIGIN_PX (4px) is narrower than half the
+  // sprite's 19px X-extent, so at the player's fixed row (cx=4, right at
+  // that edge) an unclamped originX goes negative and silently clips the
+  // sprite's leading column off the left edge of the screen - permanently,
+  // every frame, since the player never leaves that row. Same risk exists
+  // at the opposite (row-0/spawn) edge for an obstacle, though the margin
+  // there happens to fit exactly. Clamping shifts the sprite a few px off
+  // true center only when this would otherwise happen, rather than ever
+  // silently dropping a column.
+  if (originX < 0) originX = 0;
+  if (originX + totalX > OLED_WIDTH) originX = OLED_WIDTH - totalX;
+  int originY = cy - totalY / 2;
+  for (int i = 0; i < laneCells; i++) {
+    for (int j = 0; j < travelCells; j++) {
+      int shapeCol = flipped ? (travelCells - 1 - j) : j;
+      if (!RACING_CAR_SHAPE[i][shapeCol]) continue;
+      int x = originX + j * (sq + gap);
+      int y = originY + i * (sq + gap);
+      display.drawRect(x, y, sq, sq, SSD1306_WHITE);
+    }
+  }
 }
 
 // Dashed tick-mark borders on both road edges, matching the reference
@@ -2108,9 +2253,13 @@ static void drawRacingRoad() {
   }
 }
 
+// Rotated (this task's explicit ask) - same reasoning/mechanics as
+// drawTetrisScore()'s comment.
 static void drawRacingScore(int score) {
-  display.setCursor(2, 0);
+  display.setRotation(1);
+  display.setCursor(0, 0);
   display.print(score);
+  display.setRotation(0);
 }
 
 static void drawRacingScene(const RacingSnapshot& snap) {
@@ -2120,12 +2269,12 @@ static void drawRacingScene(const RacingSnapshot& snap) {
     if (!snap.cars[i].active) continue;
     int cx, cy;
     racingCellToPx(snap.cars[i].row, snap.cars[i].lane, cx, cy);
-    drawRacingCar(cx, cy);
+    drawRacingCar(cx, cy, false);
   }
 
   int px, py;
   racingCellToPx(RACING_PLAYER_ROW, snap.playerLane, px, py);
-  drawRacingCar(px, py);
+  drawRacingCar(px, py, true);  // flipped - faces back up the road, opposite the obstacles
 
   drawRacingScore(snap.score);
 }
@@ -2153,12 +2302,16 @@ static void drawRacingOverFlashScene(const RacingSnapshot& snap) {
 
   bool blinkOn = (millis() / GAME_OVER_FLASH_BLINK_MS) % 2 == 0;
   if (blinkOn) {
-    const int boxW = 76, boxH = 22;
-    const int boxX = (OLED_WIDTH - boxW) / 2;
-    const int boxY = (OLED_HEIGHT - boxH) / 2;
+    // Rotated (this task's explicit ask) - same reasoning/dimensions as
+    // drawTetrisOverFlashScene()'s box.
+    display.setRotation(1);
+    const int boxW = 58, boxH = 22;
+    const int boxX = (OLED_HEIGHT - boxW) / 2;
+    const int boxY = (OLED_WIDTH - boxH) / 2;
     display.fillRect(boxX, boxY, boxW, boxH, SSD1306_BLACK);
     display.drawRect(boxX, boxY, boxW, boxH, SSD1306_WHITE);
-    printCentered("GAME OVER", boxY, boxY + boxH, 9);
+    printCenteredRotated("GAME OVER", boxY, boxY + boxH, 9);
+    display.setRotation(0);
   }
 
   display.display();
@@ -2171,13 +2324,20 @@ static void drawRacingPlayScene(const RacingSnapshot& snap) {
 
   drawRacingScene(snap);
 
+  // Rotated (this task's explicit ask) - same mechanics as
+  // printCenteredRotated()'s comment. Full 0..OLED_WIDTH(128) logical
+  // band, matching the original's full 0..OLED_HEIGHT(64) physical band.
   if (snap.state == RACING_PAUSED) {
-    printCentered("PAUSED", 0, OLED_HEIGHT, 12);
+    display.setRotation(1);
+    printCenteredRotated("PAUSED", 0, OLED_WIDTH, 12);
+    display.setRotation(0);
   } else if (snap.state == RACING_COUNTDOWN) {
     const char* word = snap.countdownValue == 2 ? "READY" : (snap.countdownValue == 1 ? "SET" : "GO");
     char buf[16];
     snprintf(buf, sizeof(buf), "%s\n%d", word, snap.countdownValue);
-    printCentered(buf, 0, OLED_HEIGHT, 12);
+    display.setRotation(1);
+    printCenteredRotated(buf, 0, OLED_WIDTH, 12);
+    display.setRotation(0);
   }
   // RACING_RUNNING: road + cars + score only, no overlay.
 
@@ -2203,180 +2363,6 @@ void updateRacingFrame() {
   lastRacingFrameMs = now;
   stepRacingGame();
   showRacingFrame();
-}
-
-// ---- Tic-Tac-Toe ----
-// Same "physics/state has zero display code" split as every other game -
-// TicTacToeEngine.cpp never touches `display` directly. Rendered flat, no
-// 90-degree rotation like Tetris/Racing (no fall/approach axis here).
-
-// (subBoard, cellInSubBoard) -> physical px, matching TTTSnapshot's own
-// row-major indexing: subBoard 0-8 is the meta-grid read left-to-right,
-// top-to-bottom, cellInSubBoard 0-8 the same within that sub-board.
-static void ticTacToeCellToPx(int subBoard, int cell, int& outX, int& outY) {
-  int metaRow = subBoard / 3, metaCol = subBoard % 3;
-  int r = cell / 3, c = cell % 3;
-  outX = TTT_ORIGIN_X + (metaCol * 3 + c) * TTT_CELL_PX;
-  outY = TTT_ORIGIN_Y + (metaRow * 3 + r) * TTT_CELL_PX;
-}
-
-// 8 internal grid lines each axis - every 3rd one (the meta 3x3 boundary)
-// drawn as a doubled 2px line so the super-grid reads clearly against the
-// sub-grid at a glance; there's no real "thick line" on a 1-bit display
-// otherwise. Same doubled-line trick, just the simplest one that works here.
-static void drawTTTGrid() {
-  for (int i = 1; i < 9; i++) {
-    int x = TTT_ORIGIN_X + i * TTT_CELL_PX;
-    display.drawFastVLine(x, TTT_ORIGIN_Y, TTT_BOARD_PX, SSD1306_WHITE);
-    if (i % 3 == 0) display.drawFastVLine(x + 1, TTT_ORIGIN_Y, TTT_BOARD_PX, SSD1306_WHITE);
-  }
-  for (int i = 1; i < 9; i++) {
-    int y = TTT_ORIGIN_Y + i * TTT_CELL_PX;
-    display.drawFastHLine(TTT_ORIGIN_X, y, TTT_BOARD_PX, SSD1306_WHITE);
-    if (i % 3 == 0) display.drawFastHLine(TTT_ORIGIN_X, y + 1, TTT_BOARD_PX, SSD1306_WHITE);
-  }
-  display.drawRect(TTT_ORIGIN_X, TTT_ORIGIN_Y, TTT_BOARD_PX, TTT_BOARD_PX, SSD1306_WHITE);
-}
-
-// Small per-cell mark, drawn within a still-open sub-board.
-static void drawTTTMarkSmall(int px, int py, TTTMark mark) {
-  if (mark == TTT_X) {
-    display.drawLine(px + 1, py + 1, px + TTT_CELL_PX - 2, py + TTT_CELL_PX - 2, SSD1306_WHITE);
-    display.drawLine(px + TTT_CELL_PX - 2, py + 1, px + 1, py + TTT_CELL_PX - 2, SSD1306_WHITE);
-  } else if (mark == TTT_O) {
-    display.drawCircle(px + TTT_CELL_PX / 2, py + TTT_CELL_PX / 2, TTT_CELL_PX / 2 - 1, SSD1306_WHITE);
-  }
-}
-
-// Large mark spanning a whole decided sub-board (18x18px), drawn instead of
-// its 9 individual cells once it's been claimed - a glance should read the
-// meta-state without needing to re-parse 9 tiny cells. A drawn sub-board
-// gets a small filled square (distinct from both X's diagonals and O's
-// ring) rather than either mark, since it belongs to neither player.
-static void drawTTTMarkLarge(int bx, int by, TTTMark owner) {
-  const int boardPx = 3 * TTT_CELL_PX;
-  if (owner == TTT_X) {
-    display.drawLine(bx + 2, by + 2, bx + boardPx - 3, by + boardPx - 3, SSD1306_WHITE);
-    display.drawLine(bx + boardPx - 3, by + 2, bx + 2, by + boardPx - 3, SSD1306_WHITE);
-  } else if (owner == TTT_O) {
-    display.drawCircle(bx + boardPx / 2, by + boardPx / 2, boardPx / 2 - 3, SSD1306_WHITE);
-  } else if (owner == TTT_DRAW) {
-    const int s = 4;
-    display.fillRect(bx + boardPx / 2 - s / 2, by + boardPx / 2 - s / 2, s, s, SSD1306_WHITE);
-  }
-}
-
-static void drawTTTBoard(const TTTSnapshot& snap) {
-  drawTTTGrid();
-
-  for (int b = 0; b < 9; b++) {
-    int metaRow = b / 3, metaCol = b % 3;
-    int bx = TTT_ORIGIN_X + metaCol * 3 * TTT_CELL_PX;
-    int by = TTT_ORIGIN_Y + metaRow * 3 * TTT_CELL_PX;
-
-    if (snap.subOwner[b] != TTT_EMPTY) {
-      drawTTTMarkLarge(bx, by, snap.subOwner[b]);
-      continue;
-    }
-    for (int c = 0; c < 9; c++) {
-      if (snap.cellMark[b][c] == TTT_EMPTY) continue;
-      int px, py;
-      ticTacToeCellToPx(b, c, px, py);
-      drawTTTMarkSmall(px, py, snap.cellMark[b][c]);
-    }
-  }
-
-  // Cursor highlight - invert whichever region is currently targeted
-  // (SSD1306_INVERSE flips whatever's already drawn there, mark or grid
-  // line, so one call works regardless of what's underneath). Region size
-  // alone tells the two selection modes apart: a whole 18x18 sub-board
-  // while picking a board, a single 6x6 cell while picking within one.
-  if (snap.selectMode == TTT_SELECT_BOARD) {
-    int metaRow = snap.cursorIndex / 3, metaCol = snap.cursorIndex % 3;
-    int bx = TTT_ORIGIN_X + metaCol * 3 * TTT_CELL_PX;
-    int by = TTT_ORIGIN_Y + metaRow * 3 * TTT_CELL_PX;
-    display.fillRect(bx, by, 3 * TTT_CELL_PX, 3 * TTT_CELL_PX, SSD1306_INVERSE);
-  } else {
-    int px, py;
-    ticTacToeCellToPx(snap.activeBoard, snap.cursorIndex, px, py);
-    display.fillRect(px, py, TTT_CELL_PX, TTT_CELL_PX, SSD1306_INVERSE);
-  }
-
-  // Whose turn it is, corner overlay - same (2, 0) corner-text convention
-  // as drawRacingScore()/drawTetrisScore(), just a letter instead of a
-  // number since there's no numeric score in this game.
-  display.setCursor(2, 0);
-  display.print(snap.currentPlayer == TTT_X ? "X" : "O");
-}
-
-static const char* tttResultText(TTTMark winner) {
-  if (winner == TTT_X) return "X WINS";
-  if (winner == TTT_O) return "O WINS";
-  return "TIE GAME";
-}
-
-static void drawTTTOverScreen(const TTTSnapshot& snap) {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  char buf[48];
-  // No "best:" line - this game has no best-score concept (see
-  // TicTacToeEngine.h's top comment).
-  snprintf(buf, sizeof(buf), "GAME OVER\n\n%s\n\npress to retry", tttResultText(snap.overallWinner));
-  printCentered(buf, 2, OLED_HEIGHT - 2, 9);
-  display.display();
-}
-
-// Frozen final board with a blinking result box - same structure as every
-// other game's fatal-flash screen, duplicated rather than shared for the
-// same reasoning as those.
-static void drawTTTOverFlashScene(const TTTSnapshot& snap) {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-
-  drawTTTBoard(snap);
-
-  bool blinkOn = (millis() / GAME_OVER_FLASH_BLINK_MS) % 2 == 0;
-  if (blinkOn) {
-    const int boxW = 76, boxH = 22;
-    const int boxX = (OLED_WIDTH - boxW) / 2;
-    const int boxY = (OLED_HEIGHT - boxH) / 2;
-    display.fillRect(boxX, boxY, boxW, boxH, SSD1306_BLACK);
-    display.drawRect(boxX, boxY, boxW, boxH, SSD1306_WHITE);
-    printCentered(tttResultText(snap.overallWinner), boxY, boxY + boxH, 9);
-  }
-
-  display.display();
-}
-
-static void drawTTTPlayScene(const TTTSnapshot& snap) {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  drawTTTBoard(snap);
-  display.display();
-}
-
-void showTicTacToeFrame() {
-  const TTTSnapshot& snap = getTicTacToeSnapshot();
-  if (snap.state == TTT_OVER) {
-    drawTTTOverScreen(snap);
-  } else if (snap.state == TTT_OVER_FLASH) {
-    drawTTTOverFlashScene(snap);
-  } else {
-    drawTTTPlayScene(snap);  // TTT_RUNNING - no countdown/paused overlay, this game has neither
-  }
-}
-
-static unsigned long lastTTTFrameMs = 0;
-
-void updateTicTacToeFrame() {
-  unsigned long now = millis();
-  if (now - lastTTTFrameMs < GAME_FRAME_INTERVAL_MS) return;
-  lastTTTFrameMs = now;
-  stepTicTacToeGame();
-  showTicTacToeFrame();
 }
 
 static char lastNightTimeStr[8] = "";

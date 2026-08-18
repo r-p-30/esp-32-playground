@@ -57,7 +57,7 @@ static void resetCommon() {
   countdownStartMs = millis();
   countdownValue = 2;
 
-  playerLane = 0;
+  playerLane = RACING_LANES / 2;  // starts centered (middle lane), not pinned to an edge lane
   clearCars();
   ticksSinceLastSpawn = RACING_MIN_SPAWN_GAP_TICKS;  // eligible to spawn as soon as RUNNING starts, not after an extra wait
 

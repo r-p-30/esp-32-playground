@@ -2,7 +2,7 @@
 
 **Hardware context:** ESP32, 128x64 I2C OLED (SSD1306, address 0x3C), KY-040 rotary encoder (CLK→GPIO18, DT→GPIO19, SW→GPIO23, quadrature-decoded), passive piezo buzzer (GPIO25). Single rotation axis + single button as the only inputs — no d-pad, no multi-button combos.
 
-This doc describes what's actually built (`firmware/DeskMate/Game.h`, `GameEngine.*`, `WhackEngine.*`, `SnakeEngine.*`, `TetrisEngine.*`, `RacingEngine.*`, `TicTacToeEngine.*`, `Games.cpp`) — code is the source of truth if the two ever disagree again. §1–6 (Dino Jump through Tic-Tac-Toe) are playable today and match picker-menu order exactly. §7–8 (Tank Battle, Tank Arena) are planned next; Tank Battle occupies the picker menu's still-reserved final slot (`GAME_SLOT_7` in `Game.h`, shown as "Tank Battle (soon)"), Tank Arena has no slot at all yet — both distilled from `docs/brick-game-plan.md`'s finalized-but-unbuilt spec.
+This doc describes what's actually built (`firmware/DeskMate/Game.h`, `GameEngine.*`, `WhackEngine.*`, `SnakeEngine.*`, `TetrisEngine.*`, `RacingEngine.*`, `Games.cpp`) — code is the source of truth if the two ever disagree again. §1–5 (Dino Jump through Car Racing) are playable today and match picker-menu order exactly. §6–7 (Tank Battle, Tank Arena) are planned next; Tank Battle occupies the picker menu's still-reserved final slot (`GAME_SLOT_6` in `Game.h`, shown as "Tank Battle (soon)"), Tank Arena has no slot at all yet — both distilled from `docs/brick-game-plan.md`'s finalized-but-unbuilt spec.
 
 **Entry/navigation:** long-press from the card browser opens the game picker menu (not a boot-time hidden mode). Rotate to browse titles (`GAMES[]` in `Games.cpp`), short press launches the highlighted one. From inside a game, long/very-long press backs out one level to the picker menu; from the picker menu, one further level out to the card browser. The companion site's dashboard can also toggle game mode remotely, or jump straight into a specific game, bypassing the picker menu.
 
@@ -106,34 +106,9 @@ This doc describes what's actually built (`firmware/DeskMate/Game.h`, `GameEngin
 
 ---
 
-## 6. Tic-Tac-Toe
+## 6. Tank Battle *(coming soon — not yet implemented)*
 
-**Concept:** Ultimate Tic-Tac-Toe — a 9x9 grid, really a 3x3 meta-grid of 3x3 sub-boards. Win a sub-board with a normal 3-in-a-row to claim it; win the whole game with a 3-in-a-row of *claimed sub-boards* on the meta-grid, or it's a tie once every sub-board is claimed/drawn with no meta-line. Rendered flat, unlike Tetris/Racing/the future Tank Battle — there's no fall/approach axis here, so no 90-degree rotation.
-
-**Two-player, local, turn-based** — no computer opponent, no timer; players alternate the same encoder, X moving first. Unlike every other game here, there's no Ready/Set/Go countdown (nothing needs a "get ready" beat for a turn-based board game) and no lives/misses concept.
-
-**Input — two selection modes per turn, both driven by the same rotate + press:**
-- **Picking a sub-board** (`TTT_SELECT_BOARD`): rotate moves a highlighted 18x18px cursor box between the 9 sub-boards, skipping already-decided ones and wrapping around. Press locks in the highlighted sub-board and switches to picking a cell within it — no mark placed yet.
-- **Picking a cell** (`TTT_SELECT_CELL`): rotate moves a highlighted 6x6px cursor box between that sub-board's still-empty cells, wrapping around. Press places the current player's mark (X or O) there — fully committed, no undo.
-- A turn starts in whichever mode the previous move's rule (below) routes it to; the very first move of the game has no forced board yet, so it starts in board-picking mode.
-
-**Core mechanics:**
-- Standard Ultimate Tic-Tac-Toe forced-move rule: the cell just played (its position within its own sub-board) dictates which sub-board the *other* player must play in next. If that sub-board is still open, their turn skips straight to cell-picking mode inside it (no free board choice). If it's already decided (won or drawn), they get a free pick instead — the same free choice the very first move of the game gets.
-- A sub-board is claimed the instant a 3-in-a-row completes within it (single mark placement can complete at most one line, so no ambiguity); if it fills with no 3-in-a-row, it's marked drawn instead — either way it's locked and skipped by future board-picks.
-- A drawn sub-board counts toward neither player for the meta 3-in-a-row check, same as an empty one — only X-claimed or O-claimed sub-boards form a meta-line.
-- The run ends the instant either a meta 3-in-a-row completes (that player wins) or all 9 sub-boards are decided with no meta-line (tie) — checked right after the sub-board-deciding move, before the turn would otherwise flip.
-
-**Rendering:** all 8 internal grid lines are drawn, but the 2 that mark the 3x3 meta-boundary are doubled (2px) so the super-grid reads clearly against the finer sub-grid at a glance — the simplest way to fake a "thick line" distinction on a 1-bit display. A decided sub-board renders one large mark spanning its whole 18x18 block instead of 9 tiny cells (X's diagonals, O's ring, or a small filled square for a draw) so the meta-state reads at a glance without re-parsing 9 cells. The cursor itself is drawn by inverting whichever region is currently targeted (`SSD1306_INVERSE`), so it works identically over grid lines, marks, or blank cells without a separate cursor sprite. Current turn (X or O) shows as corner text, same (2, 0) position Racing/Tetris use for their score.
-
-**No best score** — the first game here without one; a two-player win/tie/tie game has no meaningful high-score number to chase, so this game skips `HighScores.h` entirely and its result card has no "best:" line.
-
-**Feedback:** placing a mark reuses the same click as Whack's hit/Snake's eat; claiming a sub-board reuses Racing's level-up blip as a mid-run milestone chime; the alarm + blink plays once on the final win/tie, same shared "run just ended" signal as every other game. A board-picking press (locking in which sub-board, not placing a mark) stays silent — a navigational commit, not a scoring event, same "not every input needs a sound" precedent as Tetris's shift/rotate.
-
----
-
-## 7. Tank Battle *(coming soon — not yet implemented)*
-
-Occupies the game menu's still-reserved final slot (`GAME_SLOT_7` in `Game.h`, shown as "Tank Battle (soon)" in the picker). Behavior is fully resolved in `docs/brick-game-plan.md`, just not built yet:
+Occupies the game menu's still-reserved final slot (`GAME_SLOT_6` in `Game.h`, shown as "Tank Battle (soon)" in the picker). Behavior is fully resolved in `docs/brick-game-plan.md`, just not built yet:
 
 - Same 90°-rotated approach-axis convention as Tetris/Racing: player's tank sits at the near edge in one of 4 fixed lanes (set at the start of a run, no widening ramp like Racing's), enemy tanks spawn at the far edge and advance down their spawn lane.
 - Rotate = shift lanes, clamped (no wraparound). Press = fire a bullet from the current lane — fully committed to firing, no pause-on-press.
@@ -145,6 +120,6 @@ Occupies the game menu's still-reserved final slot (`GAME_SLOT_7` in `Game.h`, s
 
 ---
 
-## 8. Tank Arena *(coming soon — deferred, working title)*
+## 7. Tank Arena *(coming soon — deferred, working title)*
 
 Documented for future reference in `docs/brick-game-plan.md`, but explicitly **not scheduled** yet and has no game-menu slot at all today. Free-roaming top-down tank arena — unlike Tank Battle's fixed-lane model, the player's tank can be anywhere on screen and face/move in all 4 directions, with 2–3 enemy tanks active at fixed spawn positions/facings. Best built once a second encoder is added to the hardware, since the current single-encoder input budget (rotate + short-press only, long/very-long press are hardwired to always exit to the game menu) can't cleanly give this game three independent actions (turn, move, fire) without compromise — a one-encoder fallback design (auto-advance in the tank's current facing, same continuous movement model as Snake) is sketched in the plan doc if it ends up built before a second encoder does.

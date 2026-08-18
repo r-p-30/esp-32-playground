@@ -300,15 +300,6 @@
 // ask (docs/brick-game-plan.md).
 #define RACING_MIN_SPAWN_GAP_TICKS 5
 
-// ---- Tic-Tac-Toe ----
-// 9x9 grid (a 3x3 meta-grid of 3x3 sub-boards) rendered flat, no 90-degree
-// rotation like Tetris/Racing use - this task's explicit call, since
-// there's no fall/approach axis here to rotate in the first place.
-#define TTT_CELL_PX     6                                    // same unit size as Tetris/Racing's block
-#define TTT_BOARD_PX    (9 * TTT_CELL_PX)                     // 54
-#define TTT_ORIGIN_X    ((OLED_WIDTH  - TTT_BOARD_PX) / 2)    // 37, centered
-#define TTT_ORIGIN_Y    ((OLED_HEIGHT - TTT_BOARD_PX) / 2)    // 5, centered
-
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----
 // The device holds one permanent WebSocket connection to the hosted site

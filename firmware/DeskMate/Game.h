@@ -14,15 +14,14 @@ enum GameId {
   GAME_SNAKE,
   GAME_TETRIS,
   GAME_RACING,
-  GAME_TIC_TAC_TOE,
   // Reserved, not implemented yet - see Games.cpp's stub wrapper. Real
   // name/game TBD (docs/brick-game-plan.md's Tank Battle is the leading
-  // candidate) - rename when it's actually built, same as GAME_TETRIS,
-  // GAME_RACING and GAME_TIC_TAC_TOE all started out as stubs before they
-  // existed. Numbered _7 (not _5) since it's the 7th picker-menu slot now
-  // that Racing and Tic-Tac-Toe both landed ahead of it - was GAME_SLOT_5
-  // back when it was the very next reserved slot after Tetris.
-  GAME_SLOT_7,
+  // candidate) - rename when it's actually built, same as GAME_TETRIS and
+  // GAME_RACING both started out as stubs before they existed. Numbered _6
+  // (not _5) since it's the 6th picker-menu slot now that Racing landed
+  // ahead of it - was GAME_SLOT_5 back when it was the very next reserved
+  // slot after Tetris.
+  GAME_SLOT_6,
   GAME_COUNT
 };
 

@@ -54,12 +54,6 @@ void updateTetrisFrame();
 void showRacingFrame();
 void updateRacingFrame();
 
-// Same pair of calls again, but for Tic-Tac-Toe (TicTacToeEngine.h) -
-// rendered flat, no 90-degree rotation like Tetris/Racing (no fall/approach
-// axis to rotate in the first place), see docs/game-mode-plan.md.
-void showTicTacToeFrame();
-void updateTicTacToeFrame();
-
 // Dims the display and shows the full-screen inverted clock. Call once
 // when entering; call renderNightMode() every loop() iteration after
 // that (it only actually redraws when the displayed minute changes).

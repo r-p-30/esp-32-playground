@@ -40,7 +40,7 @@ short-press entirely.
 | Long (500ms–2s) | Open the hidden game-mode picker menu |
 | Very long (≥2s) | Toggle night mode — dims the screen and shows a full-screen inverted clock with a crescent moon |
 
-**Hidden game mode**: the long-press picker menu lists 7 games — 6 playable today (Dino Jump, Whack-a-Mole, Snake, Tetris, Car Racing, Tic-Tac-Toe) plus one reserved "Tank Battle (soon)" slot. Most share the same Ready/Set/Go → play → game-over lifecycle and NVS-persisted best scores; Tic-Tac-Toe is the exception (turn-based, no countdown, no best score — see `docs/game-mode-plan.md`). Full specs: `docs/game-mode-plan.md`.
+**Hidden game mode**: the long-press picker menu lists 6 games — 5 playable today (Dino Jump, Whack-a-Mole, Snake, Tetris, Car Racing) plus one reserved "Tank Battle (soon)" slot. All 5 share the same Ready/Set/Go → play → game-over lifecycle and NVS-persisted best scores. Full specs: `docs/game-mode-plan.md`.
 
 **Fully offline-first**: none of the above needs WiFi. A brief NTP sync
 happens once at boot (with an HTTPS-header fallback if NTP is blocked on
@@ -123,8 +123,8 @@ Firmware compiles clean against `esp32:esp32@3.3.11` (42% flash, 17%
 RAM, verified via a clean `arduino-cli` build) with the Huge APP
 partition scheme. Bench-tested on real hardware for the core loop (OLED,
 encoder, buzzer, WiFi/NTP, WiFiManager captive-portal setup). Game mode
-is real and playable — 6 games built (Dino Jump, Whack-a-Mole, Snake,
-Tetris, Car Racing, Tic-Tac-Toe), with Tank Battle next in the still-reserved
+is real and playable — 5 games built (Dino Jump, Whack-a-Mole, Snake,
+Tetris, Car Racing), with Tank Battle next in the still-reserved
 picker slot (see `docs/game-mode-plan.md`). Remote control (permanent
 WebSocket, card alignment/corner-emoji, night mode, game mode/game
 select) is built and has been run **end-to-end against the real physical
