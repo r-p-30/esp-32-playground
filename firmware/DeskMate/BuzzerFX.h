@@ -37,6 +37,11 @@ void playGameMiss();
 
 // Tetris line clear - pitch and duration both scale up with `lines`
 // (1-4 simultaneous), so a multi-line clear reads as more of an event than
-// a single one, per docs/extended-game-plan.md's Tetris feedback note.
+// a single one, per docs/game-mode-plan.md's Tetris feedback note.
 // Non-blocking, same reasoning as playGameJump()/playGameMiss().
 void playGameLineClear(int lines);
+
+// Car Racing's 2->3 lane widen - single bright blip, pitched above
+// playGameJump() so it reads as a milestone rather than another gameplay
+// blip. Non-blocking, same reasoning as the other in-game sounds above.
+void playGameLevelUp();

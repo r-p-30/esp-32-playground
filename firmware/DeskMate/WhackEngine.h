@@ -50,7 +50,7 @@ void moleMoveCursor(int direction);
 // running. If the cursor is on the mole: score++, mole immediately
 // respawns elsewhere. If the cursor isn't on the mole: no-op - a whiffed
 // press does NOT count as a miss, only a timed-out mole does (see
-// stepMoleGame()) - matches docs/extended-game-plan.md's own definition of
+// stepMoleGame()) - matches docs/game-mode-plan.md's own definition of
 // a miss.
 void moleWhack();
 

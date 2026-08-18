@@ -64,6 +64,10 @@ void playGameLineClear(int lines) {
   tone(PIN_BUZZER, freq, dur);
 }
 
+void playGameLevelUp() {
+  tone(PIN_BUZZER, 2200, 150);
+}
+
 void playGameOverAlarm() {
   // Low and sustained, distinct from every other in-game beep (all of
   // which are short and higher-pitched) - reads as "the run is over," not

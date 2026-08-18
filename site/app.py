@@ -51,12 +51,13 @@ GAMES = [
     {"index": 1, "name": "Whack-a-mole", "implemented": True},
     {"index": 2, "name": "Snake", "implemented": True},
     {"index": 3, "name": "Tetris", "implemented": True},
-    # Reserved slots (Game.h's GAME_SLOT_5/6) - not implemented yet, added
-    # purely so the device's on-device picker menu has enough games to
-    # exercise its new paging (GAME_MENU_ROWS_PER_PAGE in Config.h). Rename
-    # once real games land here, same as every prior game did.
-    {"index": 4, "name": "Game 5", "implemented": False},
-    {"index": 5, "name": "Game 6", "implemented": False},
+    {"index": 4, "name": "Car Racing", "implemented": True},
+    {"index": 5, "name": "Tic-Tac-Toe", "implemented": True},
+    # Reserved slot (Game.h's GAME_SLOT_7) - not implemented yet. Named for
+    # its leading candidate (docs/brick-game-plan.md's Tank Battle) so the
+    # menu reads "Tank Battle (soon)" instead of a placeholder number -
+    # still a stub until it's actually built.
+    {"index": 6, "name": "Tank Battle", "implemented": False},
 ]
 
 

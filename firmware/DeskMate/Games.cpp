@@ -3,6 +3,8 @@
 #include "WhackEngine.h"
 #include "SnakeEngine.h"
 #include "TetrisEngine.h"
+#include "RacingEngine.h"
+#include "TicTacToeEngine.h"
 #include "DisplayUI.h"
 #include "BuzzerFX.h"
 #include "Config.h"
@@ -248,13 +250,133 @@ static int tetrisBestScore() {
   return getTetrisSnapshot().bestScore;
 }
 
+// ---- Car Racing ----
+// Same wrapper shape as Dino/Whack/Snake/Tetris above - RacingEngine.cpp/
+// DisplayUI.cpp own the physics/drawing, this exposes it through the
+// shared Game interface and owns the sound edge-detection (RacingEngine.cpp
+// has no sound calls in it, same reasoning as the other four engines).
+static RacingRunState racingPrevState = RACING_COUNTDOWN;
+
+static void racingEnter() {
+  initRacingGame();
+  racingPrevState = RACING_COUNTDOWN;
+  showRacingFrame();
+}
+
+static void racingStep() {
+  updateRacingFrame();  // already throttles itself to GAME_FRAME_INTERVAL_MS
+
+  const RacingSnapshot& snap = getRacingSnapshot();
+  if (snap.state == RACING_OVER_FLASH && racingPrevState != RACING_OVER_FLASH) {
+    // Collision just happened - single life, no misses (this task's
+    // explicit call). Alarm rings for the whole flash window, same as
+    // every other game's.
+    playGameOverAlarm();
+  }
+  racingPrevState = snap.state;
+}
+
+static void racingOnShortPress() {
+  if (isRacingGameOver()) {
+    racingRestart();
+    racingPrevState = RACING_COUNTDOWN;
+    showRacingFrame();
+    return;
+  }
+  racingTogglePause();
+  showRacingFrame();  // redraw immediately so the PAUSED overlay shows without waiting for the next throttled tick
+}
+
+static void racingOnRotate(int direction) {
+  racingMoveLane(direction);
+  showRacingFrame();  // redraw immediately, same reasoning as Whack's cursor move
+}
+
+static int racingBestScore() {
+  return getRacingSnapshot().bestScore;
+}
+
+// ---- Tic-Tac-Toe ----
+// Same wrapper shape as every other game above - TicTacToeEngine.cpp/
+// DisplayUI.cpp own the state/drawing, this exposes it through the shared
+// Game interface. No lives/misses to watch for (see TicTacToeEngine.h's top
+// comment), so the sound edge-detection here only needs to watch for a
+// sub-board just getting claimed and the run ending, unlike every other
+// game's miss-tracking.
+static TTTRunState tttPrevState = TTT_RUNNING;
+static int tttPrevDecidedCount = 0;
+
+static int tttCountDecided(const TTTMark subOwner[9]) {
+  int n = 0;
+  for (int i = 0; i < 9; i++) {
+    if (subOwner[i] != TTT_EMPTY) n++;
+  }
+  return n;
+}
+
+static void ticTacToeEnter() {
+  initTicTacToeGame();
+  tttPrevState = TTT_RUNNING;
+  tttPrevDecidedCount = 0;
+  showTicTacToeFrame();
+}
+
+static void ticTacToeStep() {
+  updateTicTacToeFrame();  // already throttles itself to GAME_FRAME_INTERVAL_MS
+
+  const TTTSnapshot& snap = getTicTacToeSnapshot();
+  if (snap.state == TTT_OVER_FLASH && tttPrevState != TTT_OVER_FLASH) {
+    // Win or tie just happened - alarm rings for the whole flash window,
+    // same shared "run just ended" signal as every other game's fatal hit.
+    playGameOverAlarm();
+  } else {
+    int decided = tttCountDecided(snap.subOwner);
+    if (decided > tttPrevDecidedCount) {
+      // A sub-board was just claimed (won or drawn) - reuse Racing's
+      // level-up blip as a mid-run milestone chime, same fit as there.
+      playGameLevelUp();
+    }
+    tttPrevDecidedCount = decided;
+  }
+  tttPrevState = snap.state;
+}
+
+static void ticTacToeOnShortPress() {
+  if (isTicTacToeGameOver()) {
+    ticTacToeRestart();
+    tttPrevState = TTT_RUNNING;
+    tttPrevDecidedCount = 0;
+    showTicTacToeFrame();
+    return;
+  }
+
+  // Only an actual mark-placing press gets a click - a board-select press
+  // is a silent navigational commit, same "not every input needs a sound"
+  // precedent as Tetris's shift/rotate.
+  bool placingMark = (getTicTacToeSnapshot().selectMode == TTT_SELECT_CELL);
+  ticTacToePress();
+  if (placingMark) playGameJump();
+  showTicTacToeFrame();  // redraw immediately, same immediacy reasoning as Whack's cursor
+}
+
+static void ticTacToeOnRotate(int direction) {
+  ticTacToeMoveCursor(direction);
+  showTicTacToeFrame();  // redraw immediately, same reasoning as Whack's cursor move
+}
+
+// No best-score concept for this game (see TicTacToeEngine.h's top
+// comment) - always 0, same as the reserved stub below.
+static int ticTacToeBestScore() {
+  return 0;
+}
+
 // ---- Reserved slots (not implemented yet) ----
-// GAME_SLOT_5/6 (Game.h) - placeholders so the picker menu has more than
-// one page to demonstrate/exercise GAME_MENU_ROWS_PER_PAGE's paging
-// (Config.h/DisplayUI.cpp's showGameMenu()). `implemented: false` means
-// DeskMate.ino never actually calls these - kept as real no-ops rather than
-// nullptr just so GAMES[] never holds a dangling function pointer, same
-// precedent Tetris's own stub used before it existed.
+// GAME_SLOT_7 (Game.h) - placeholder so the picker menu keeps a spare slot
+// for Tank Battle (docs/brick-game-plan.md), named below so the menu reads
+// "Tank Battle (soon)" instead of a placeholder number. `implemented: false`
+// means DeskMate.ino never actually calls this - kept as a real no-op rather
+// than nullptr just so GAMES[] never holds a dangling function pointer, same
+// precedent every other game's stub used before it existed.
 static void stubEnter() {}
 static void stubStep() {}
 static void stubOnShortPress() {}
@@ -262,10 +384,11 @@ static void stubOnRotate(int direction) { (void)direction; }
 static int stubBestScore() { return 0; }
 
 const Game GAMES[GAME_COUNT] = {
-  { "Dino Jump",    true,  dinoEnter,   dinoStep,   dinoOnShortPress,   dinoOnRotate,   dinoBestScore },
-  { "Whack-a-mole", true,  whackEnter,  whackStep,  whackOnShortPress,  whackOnRotate,  whackBestScore },
-  { "Snake",        true,  snakeEnter,  snakeStep,  snakeOnShortPress,  snakeOnRotate,  snakeBestScore },
-  { "Tetris",       true,  tetrisEnter, tetrisStep, tetrisOnShortPress, tetrisOnRotate, tetrisBestScore },
-  { "Game 5",       false, stubEnter,   stubStep,   stubOnShortPress,   stubOnRotate,   stubBestScore },
-  { "Game 6",       false, stubEnter,   stubStep,   stubOnShortPress,   stubOnRotate,   stubBestScore },
+  { "Dino Jump",    true,  dinoEnter,    dinoStep,    dinoOnShortPress,    dinoOnRotate,    dinoBestScore },
+  { "Whack-a-mole", true,  whackEnter,   whackStep,   whackOnShortPress,   whackOnRotate,   whackBestScore },
+  { "Snake",        true,  snakeEnter,   snakeStep,   snakeOnShortPress,   snakeOnRotate,   snakeBestScore },
+  { "Tetris",       true,  tetrisEnter,  tetrisStep,  tetrisOnShortPress,  tetrisOnRotate,  tetrisBestScore },
+  { "Car Racing",   true,  racingEnter,  racingStep,  racingOnShortPress,  racingOnRotate,  racingBestScore },
+  { "Tic-Tac-Toe",  true,  ticTacToeEnter, ticTacToeStep, ticTacToeOnShortPress, ticTacToeOnRotate, ticTacToeBestScore },
+  { "Tank Battle",  false, stubEnter,    stubStep,    stubOnShortPress,    stubOnRotate,    stubBestScore },
 };

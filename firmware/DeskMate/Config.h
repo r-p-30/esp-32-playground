@@ -202,20 +202,18 @@
 // grid cells fit in the same physical space. COLS is the shift axis (what
 // the encoder moves) - 10 * 6 = 60 of the 64 screen-height pixels, the
 // leftover 4px is a symmetric 2px margin (TETRIS_COL_ORIGIN_PX below), not
-// a clean divisor like the old 64/8 was. ROWS is the fall axis (gravity) -
-// deliberately NOT screen-width-driven directly, see TETRIS_SIDE_PANEL_PX
-// below.
+// a clean divisor like the old 64/8 was. ROWS is the fall axis (gravity).
 #define TETRIS_CELL_PX          6
 #define TETRIS_COLS             10
 // 2px on each side of the COLS axis (64 - 10*6 = 4px leftover, split
 // evenly) - see tetrisCellToPx() in DisplayUI.cpp.
 #define TETRIS_COL_ORIGIN_PX    2
-// Reserved strip on the physical-right edge for the score panel - see plan
-// doc section 1's diagram. 18*6 + 20 = 128 exactly, so ROWS and this
-// constant must be kept in sync if either changes (no runtime check - both
-// are compile-time constants).
-#define TETRIS_SIDE_PANEL_PX    20
-#define TETRIS_ROWS             18   // (128 - TETRIS_SIDE_PANEL_PX) / TETRIS_CELL_PX
+// No more reserved side panel (dropped - see drawTetrisScore()'s comment
+// in DisplayUI.cpp for why) - the full 128px width is now the ROWS axis,
+// same 4px-leftover-split-evenly margin idea as TETRIS_COL_ORIGIN_PX above.
+// 4 + 20*6 + 4 = 128 exactly.
+#define TETRIS_ROW_ORIGIN_PX    4
+#define TETRIS_ROWS             20   // (128 - 2*TETRIS_ROW_ORIGIN_PX) / TETRIS_CELL_PX
 
 // Starting drop pace - still slower than Snake's base (SNAKE_TICK_INTERVAL_MS,
 // 260ms) since a Tetris piece needs room for up to three player actions
@@ -235,6 +233,81 @@
 // "Mid screen" along the fall axis - derived from TETRIS_ROWS rather than
 // hardcoded so it stays centered if the row count ever changes.
 #define TETRIS_MID_ROW           (TETRIS_ROWS / 2)
+
+// ---- Car Racing ----
+// See docs/racing-implementation-plan.md for the full reasoning.
+//
+// Same 90-degree screen rotation as Tetris, reused as-is rather than
+// mirrored: row 0 (where obstacles spawn) renders near the physical-right
+// edge, increasing row moves left across the screen, and the player's
+// fixed row sits at the physical-left edge - same direction Tetris pieces
+// fall in. Same CELL_PX as Tetris too, so an obstacle "block" reads as the
+// same unit size as a Tetris block (this task's explicit ask).
+#define RACING_CELL_PX            TETRIS_CELL_PX
+// 4px margin each side, same idea as TETRIS_ROW_ORIGIN_PX - 4 + 20*6 + 4 = 128.
+#define RACING_ROW_ORIGIN_PX      4
+#define RACING_ROWS               20
+// Player's fixed row - physical-left edge, i.e. the row an obstacle is on
+// right as it reaches the player.
+#define RACING_PLAYER_ROW         (RACING_ROWS - 1)
+
+// Road width along the lane axis (physical Y, the screen's short 64px
+// axis). 60 = 3*20 (RACING_LANES below), 20px/lane - see
+// drawRacingRoad()/racingCellToPx() in DisplayUI.cpp. Bumped up from the
+// original 54 (2px margin per side instead of 5px) - there was spare
+// screen-height room going unused, so this is deliberately as wide as
+// still leaves a clean margin.
+#define RACING_ROAD_WIDTH_PX      60
+#define RACING_ROAD_ORIGIN_PX     ((OLED_HEIGHT - RACING_ROAD_WIDTH_PX) / 2)
+
+// Fixed at 3 lanes from the very start of a run (RACING_COUNTDOWN
+// onward) - the original design started at 2 and widened to 3 partway
+// through on a score threshold, but that transition read as an arbitrary
+// interruption, so it's gone; the road is just always this wide now.
+#define RACING_LANES              3
+
+// Several cars can be mid-approach at once (spawn gap is much shorter
+// than the row-0-to-player crossing time), and lanes can double up -
+// spawn picks a lane independently each time, not excluding lanes
+// already in use (see RacingEngine.cpp). A pool of RACING_LANES slots
+// is a practical cap, not a "one per lane" guarantee: if every slot is
+// already active when a spawn is due, that spawn is silently skipped
+// and retried on the next eligible tick - harmless, just a slightly
+// longer gap that tick.
+#define RACING_MAX_OBSTACLES       RACING_LANES
+
+// Fixed-cadence row-step tick (one grid row per tick while running).
+// Speed ramp is a specific two-part shape (this task's explicit ask, not
+// a uniform "every N points from zero" ramp like Snake's/Whack's): flat
+// at the base pace until score reaches RACING_SPEEDUP_FIRST_SCORE, then
+// one step faster, held flat for RACING_SPEEDUP_STEP_SCORE points, then
+// another step, and so on - see currentTickIntervalMs() in
+// RacingEngine.cpp. Floored at RACING_TICK_MIN_MS so late-game stays
+// reactable-to instead of impossible.
+#define RACING_TICK_INTERVAL_MS    240UL
+#define RACING_TICK_MIN_MS         110UL
+#define RACING_SPEEDUP_FIRST_SCORE 30
+#define RACING_SPEEDUP_STEP_SCORE  20
+#define RACING_SPEEDUP_STEP_MS     20UL
+
+// Minimum ticks between two spawns (any lane) - since every active
+// obstacle advances exactly one row per tick together, a gap enforced at
+// spawn time is preserved all the way to the player's row, which is what
+// actually guarantees two obstacles can never reach the player on the same
+// tick (so there's always at least one dodge-able lane) - see
+// docs/racing-implementation-plan.md. Also what keeps a single-detent lane
+// switch always achievable in time, the original spec's explicit fairness
+// ask (docs/brick-game-plan.md).
+#define RACING_MIN_SPAWN_GAP_TICKS 5
+
+// ---- Tic-Tac-Toe ----
+// 9x9 grid (a 3x3 meta-grid of 3x3 sub-boards) rendered flat, no 90-degree
+// rotation like Tetris/Racing use - this task's explicit call, since
+// there's no fall/approach axis here to rotate in the first place.
+#define TTT_CELL_PX     6                                    // same unit size as Tetris/Racing's block
+#define TTT_BOARD_PX    (9 * TTT_CELL_PX)                     // 54
+#define TTT_ORIGIN_X    ((OLED_WIDTH  - TTT_BOARD_PX) / 2)    // 37, centered
+#define TTT_ORIGIN_Y    ((OLED_HEIGHT - TTT_BOARD_PX) / 2)    // 5, centered
 
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----

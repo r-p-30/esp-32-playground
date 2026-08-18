@@ -18,10 +18,11 @@ without reflashing.
 Full details live in [README.md](README.md) (kept up to date — treat
 it as the source of truth alongside the actual code, not this file) and:
 
-- `docs/desk-mate-project-plan.md` — hardware, wiring, parts list
+- `docs/desk-mate-project-plan.md` — parent/overview plan; also covers WiFi, remote control, deployment, and the PWA setup
+- `docs/card-mode-plan.md` — hardware, wiring, parts list, cards, night mode
 - `docs/remote-api-spec.md` — the exact JSON/WebSocket contract between site and device
 - `docs/site-project-plan.md` — site design notes
-- `docs/extended-game-plan.md` — specs for the game-mode games
+- `docs/game-mode-plan.md` — specs for the game-mode games
 
 Note: the docs above are planning documents and may describe things
 that changed once actually implemented — the firmware
@@ -35,19 +36,23 @@ truth when they disagree.
 **Firmware** (`firmware/DeskMate/`, Arduino/C++):
 
 - 23 total card slots: **22 pre-written content cards plus 1 reserved
-  custom slot** (index 20) that starts empty and can be filled in
+  custom slot** (index 21) that starts empty and can be filled in
   remotely from the site without reflashing.
-- Three button tiers on the rotary encoder (short/long/very-long press)
-  for animation playback, game-mode placeholder, and night mode.
+- Three button tiers on the rotary encoder (short/long/very-long press,
+  500ms/2000ms thresholds in `Config.h`) for animation playback, the
+  game-mode picker menu, and night mode.
 - Fully offline-first: WiFi/NTP is optional, only used for time sync
   and (if configured) the remote link.
 - Optional remote control over one permanent WebSocket
   (`RemoteControl.cpp`) — no polling. Covers jumping cards, editing
   card text/alignment/corner emoji, emoji-shortcode animations, buzz/
-  identify/trigger-animation, carousel, night mode, game mode.
-- Two real games implemented in `Games.cpp`/`GameEngine.cpp`: Dino
-  Jump and Whack-a-mole. Snake and Tetris are speced in
-  `docs/extended-game-plan.md` but not implemented yet.
+  identify/trigger-animation, carousel, night mode, game mode (including
+  launching a specific game remotely).
+- 6 real games implemented (`Games.cpp` + each game's own `*Engine.cpp`):
+  Dino Jump, Whack-a-mole, Snake, Tetris, Car Racing, Tic-Tac-Toe — see
+  `docs/game-mode-plan.md`. One picker slot is still a reserved
+  stub ("Tank Battle (soon)"); Tank Battle and a deferred Tank Arena are
+  specced but not implemented yet.
 
 **Companion site** (`site/`, Flask + `flask-sock`):
 
@@ -66,7 +71,7 @@ truth when they disagree.
 **Not built / out of scope:** image upload or per-card image
 composition, a PWA service worker (there's a `manifest.json` for
 installability, but no offline shell caching), user accounts beyond
-the single shared password, Snake/Tetris gameplay.
+the single shared password, Tank Battle/Tank Arena gameplay.
 
 ---
 

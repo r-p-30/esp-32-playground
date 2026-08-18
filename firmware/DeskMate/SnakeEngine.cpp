@@ -172,7 +172,7 @@ static void applyQueuedTurn() {
 //    shape with no self-overlap stays with no self-overlap under a uniform
 //    shift, so this can never manufacture a new collision - it only ever
 //    moves the existing shape clear of the one that just happened.
-// See docs/extended-game-plan.md's Snake section for the full reasoning.
+// See docs/game-mode-plan.md's Snake section for the full reasoning.
 static void retreatSnake() {
   if (rewindToPreTurn) {
     for (int i = 0; i < preTurnLength; i++) segments[i] = preTurnSegments[i];

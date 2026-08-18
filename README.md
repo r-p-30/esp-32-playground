@@ -9,9 +9,11 @@ feedback, and — optionally — full remote control from a hosted site.
 - `firmware/DeskMate/` — the sketch
 - `firmware/sanity-checks/` — throwaway bring-up tests for each component (blink, OLED, buzzer, encoder) — not the real firmware
 - `site/` — the companion Flask site (dashboard + card manager) that remotely controls the device
-- `docs/desk-mate-project-plan.md` — hardware, wiring, parts list, phased build plan
+- `docs/desk-mate-project-plan.md` — parent/overview plan (also covers WiFi, remote control, deployment, PWA)
+- `docs/card-mode-plan.md` — hardware, wiring, parts list, cards, night mode
 - `docs/remote-api-spec.md` — the exact JSON contract the site implements to control the device
 - `docs/site-project-plan.md` — design doc for the companion site
+- `docs/game-mode-plan.md` — specs for the game-mode games
 
 ## Hardware
 
@@ -20,7 +22,7 @@ feedback, and — optionally — full remote control from a hosted site.
 - KY-040 rotary encoder (with push-button)
 - Passive piezo buzzer
 
-Wiring and pin assignments are in `docs/desk-mate-project-plan.md` and mirrored
+Wiring and pin assignments are in `docs/card-mode-plan.md` and mirrored
 in `firmware/DeskMate/Config.h`.
 
 ## What it does
@@ -34,9 +36,11 @@ short-press entirely.
 
 | Press | Action |
 |---|---|
-| Short (<2s) | Play the current card's animation |
-| Long (2-5s) | Toggle cards ⇄ game-mode placeholder (real gameplay not built yet) |
-| Very long (≥5s) | Toggle night mode — dims the screen and shows a full-screen inverted clock with a crescent moon |
+| Short (<500ms) | Play the current card's animation |
+| Long (500ms–2s) | Open the hidden game-mode picker menu |
+| Very long (≥2s) | Toggle night mode — dims the screen and shows a full-screen inverted clock with a crescent moon |
+
+**Hidden game mode**: the long-press picker menu lists 7 games — 6 playable today (Dino Jump, Whack-a-Mole, Snake, Tetris, Car Racing, Tic-Tac-Toe) plus one reserved "Tank Battle (soon)" slot. Most share the same Ready/Set/Go → play → game-over lifecycle and NVS-persisted best scores; Tic-Tac-Toe is the exception (turn-based, no countdown, no best score — see `docs/game-mode-plan.md`). Full specs: `docs/game-mode-plan.md`.
 
 **Fully offline-first**: none of the above needs WiFi. A brief NTP sync
 happens once at boot (with an HTTPS-header fallback if NTP is blocked on
@@ -73,7 +77,7 @@ Once connected, it can be remotely told to:
 - Buzz the device, or trigger the active card's animation, without anyone touching the button
 - Send an "identify" ping (double-beep + screen flash) to confirm connectivity while debugging the site
 - Run a carousel (auto-advancing cards) with a configurable interval — hard-capped at 1 hour of continuous runtime so a forgotten toggle can't leave it running indefinitely
-- Toggle night mode or game mode remotely (mirrors the physical long/very-long press)
+- Toggle night mode or game mode remotely (mirrors the physical long/very-long press), or launch a specific game directly — skipping the picker menu, and swapping the active game mid-run if one's already playing
 
 All of this is off by default and entirely optional — the device works
 fully offline if `RemoteApi.h` is never configured.
@@ -87,11 +91,9 @@ Site design doc: `docs/site-project-plan.md`.
 A small Flask app (mobile-first PWA), deployed and running on Render, with two halves:
 
 - **Device-facing** (`/api/state` for manual/debug reads, `/ws/device` for the real permanent connection) — shared-secret auth via `X-Device-Key`, matched against `REMOTE_API_KEY` in the device's `RemoteApi.h`. Served via `gunicorn --worker-class gthread` so the held-open device socket can't block regular page requests.
-- **Human-facing UI** (`/dashboard`, `/cards`) — password-gated login (separate secret from the device key, deliberately, so leaking one doesn't compromise the other).
+- **Human-facing UI** (`/dashboard`) — password-gated login (separate secret from the device key, deliberately, so leaking one doesn't compromise the other).
 
-**Dashboard**: buzz / play animation / identify quick actions, carousel config, night/game mode send buttons, and a live status line — "● Connected"/"● Not connected" plus "last seen Ns ago" from the heartbeat. Every action shows a flash-message confirmation, so it's never ambiguous whether something saved.
-
-**Cards** (`/cards?edit=<index>`): a single-page builder, not a stacked list of 22 forms. A compact numbered picker selects which card to edit; the form has the text box + 8-shortcode emoji-insert row, alignment controls, 4 corner-emoji pickers, and animation duration, with a **live canvas preview** (128×64, scaled up) that updates as you type — catches overflow/alignment mistakes before they reach the real device. Saving is one combined action (text + alignment + corner emoji + duration, one revision bump), separate from "make active." Desktop shows fields and preview side-by-side sized to fit without page scroll; mobile stacks fields → emoji pickers → preview.
+**Dashboard** (`/dashboard`) is the single page for everything, not a stack of separate forms: buzz / play animation / identify quick actions, carousel config, night/game mode toggles (including picking a specific game to launch), a live status line ("● Connected"/"● Not connected" plus "last seen Ns ago" from the heartbeat) — and the full card editor alongside it. A compact numbered picker (`?edit=<index>`) selects which of the 23 card slots to edit; the form has the text box + 8-shortcode emoji-insert row, alignment controls, 4 corner-emoji pickers, and animation duration, with a **live canvas preview** (128×64, scaled up) that updates as you type — catches overflow/alignment mistakes before they reach the real device. Saving is one combined action (text + alignment + corner emoji + duration, one revision bump), separate from "make active." Desktop shows fields and preview side-by-side sized to fit without page scroll; mobile stacks fields → emoji pickers → preview. Every action shows a flash-message confirmation, so it's never ambiguous whether something saved. (`/cards?edit=<index>` still redirects here — kept only so old bookmarks/links don't break.)
 
 State is persisted via `state.py`; see `site/state.py` for the storage details.
 
@@ -117,17 +119,21 @@ arduino-cli compile --fqbn "esp32:esp32:esp32:PartitionScheme=huge_app" firmware
 
 ## Status
 
-Firmware compiles clean against `esp32:esp32@3.3.11` (~41% flash, ~16%
-RAM, with the Huge APP partition scheme). Bench-tested on real hardware
-for the core loop (OLED, encoder, buzzer, WiFi/NTP, WiFiManager
-captive-portal setup). Remote control (permanent WebSocket, card
-alignment/corner-emoji, night mode, game-mode placeholder) is built and
-compiling. The companion site is built, tested locally (login, dashboard
-actions, WebSocket push/heartbeat round-trip all verified against a
-simulated device), and **deployed live on Render** — not yet run
-end-to-end against the real physical device.
+Firmware compiles clean against `esp32:esp32@3.3.11` (42% flash, 17%
+RAM, verified via a clean `arduino-cli` build) with the Huge APP
+partition scheme. Bench-tested on real hardware for the core loop (OLED,
+encoder, buzzer, WiFi/NTP, WiFiManager captive-portal setup). Game mode
+is real and playable — 6 games built (Dino Jump, Whack-a-Mole, Snake,
+Tetris, Car Racing, Tic-Tac-Toe), with Tank Battle next in the still-reserved
+picker slot (see `docs/game-mode-plan.md`). Remote control (permanent
+WebSocket, card alignment/corner-emoji, night mode, game mode/game
+select) is built and has been run **end-to-end against the real physical
+device** talking to the deployed site, not just bench-tested locally. The
+companion site is built, tested locally (login, dashboard actions,
+WebSocket push/heartbeat round-trip all verified), and **deployed live on
+Render**.
 
 ## Roadmap
 
-- Real game mode (currently just a placeholder screen behind the long-press toggle)
-- End-to-end test of the deployed site against real hardware (reflash with the current partition scheme + `RemoteApi.h` pointed at the live Render URL)
+- Tank Battle (next up — see `docs/game-mode-plan.md`, spec finalized in `docs/brick-game-plan.md`, occupies the reserved picker slot)
+- Tank Arena (deferred — likely needs a second encoder for a clean control scheme, see `docs/game-mode-plan.md`)
