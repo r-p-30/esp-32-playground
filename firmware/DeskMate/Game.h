@@ -13,6 +13,13 @@ enum GameId {
   GAME_WHACK_A_MOLE,
   GAME_SNAKE,
   GAME_TETRIS,
+  // Reserved, not implemented yet (see Games.cpp's stub wrapper and
+  // GAME_MENU_ROWS_PER_PAGE in Config.h, added specifically so the picker
+  // menu has more than one page to page through) - real names/games TBD,
+  // rename these two when they're actually built, same as GAME_TETRIS
+  // itself started out as a stub before it existed.
+  GAME_SLOT_5,
+  GAME_SLOT_6,
   GAME_COUNT
 };
 

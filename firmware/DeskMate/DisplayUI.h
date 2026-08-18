@@ -42,6 +42,12 @@ void updateMoleFrame();
 void showSnakeFrame();
 void updateSnakeFrame();
 
+// Same pair of calls again, but for the Tetris game mode (TetrisEngine.h) -
+// see docs/tetris-implementation-plan.md for the 90-degree screen-rotation
+// mapping this renderer applies that none of the other games need.
+void showTetrisFrame();
+void updateTetrisFrame();
+
 // Dims the display and shows the full-screen inverted clock. Call once
 // when entering; call renderNightMode() every loop() iteration after
 // that (it only actually redraws when the displayed minute changes).

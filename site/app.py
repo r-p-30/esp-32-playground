@@ -49,8 +49,14 @@ BORDER_FLASH_DISABLE_BIT = 6
 GAMES = [
     {"index": 0, "name": "Dino Jump", "implemented": True},
     {"index": 1, "name": "Whack-a-mole", "implemented": True},
-    {"index": 2, "name": "Snake", "implemented": False},
-    {"index": 3, "name": "Tetris", "implemented": False},
+    {"index": 2, "name": "Snake", "implemented": True},
+    {"index": 3, "name": "Tetris", "implemented": True},
+    # Reserved slots (Game.h's GAME_SLOT_5/6) - not implemented yet, added
+    # purely so the device's on-device picker menu has enough games to
+    # exercise its new paging (GAME_MENU_ROWS_PER_PAGE in Config.h). Rename
+    # once real games land here, same as every prior game did.
+    {"index": 4, "name": "Game 5", "implemented": False},
+    {"index": 5, "name": "Game 6", "implemented": False},
 ]
 
 

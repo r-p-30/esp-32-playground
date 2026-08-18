@@ -12,6 +12,7 @@
 #include "GameEngine.h"
 #include "WhackEngine.h"
 #include "SnakeEngine.h"
+#include "TetrisEngine.h"
 #include "Game.h"
 
 // NOTE: if the 1.3" OLED turns out to use a different controller chip than
@@ -1406,19 +1407,58 @@ void showGameFrame() {
   }
 }
 
-// Rows split the full 64px height evenly (64 / GAME_COUNT == 16, no
-// remainder) so the list fills the screen edge to edge with nothing left
-// over - same "no permanent frame" reasoning as the game screens above,
-// there's no border eating into that budget either.
+// One dot per page, right edge of the screen, current page filled - same
+// filled-vs-hollow-circle visual language as drawLivesPips()/drawMissPips()
+// elsewhere in game mode. Only drawn once there's more than one page to
+// begin with (GAME_COUNT <= GAME_MENU_ROWS_PER_PAGE never needs this, same
+// as it never needed paging at all before GAME_SLOT_5/6 existed).
+static void drawGameMenuPageDots(int totalPages, int currentPage) {
+  if (totalPages <= 1) return;
+  const int dotX = OLED_WIDTH - 3;
+  const int spacing = 6;
+  const int startY = (OLED_HEIGHT - (totalPages - 1) * spacing) / 2;
+  for (int p = 0; p < totalPages; p++) {
+    int y = startY + p * spacing;
+    if (p == currentPage) {
+      display.fillCircle(dotX, y, 2, SSD1306_WHITE);
+    } else {
+      display.drawCircle(dotX, y, 2, SSD1306_WHITE);
+    }
+  }
+}
+
+// Rows split the full 64px height evenly across GAME_MENU_ROWS_PER_PAGE
+// slots (Config.h) - 64/4 == 16, no remainder - so a full page fills the
+// screen edge to edge, same "no permanent frame" reasoning as the game
+// screens above. Which page to draw is derived entirely from
+// selectedIndex - there's no separate page variable anywhere else in the
+// codebase (DeskMate.ino still just increments/wraps selectedGame through
+// the flat GAMES[] array exactly as it always did), so paging falls out of
+// that for free: crossing a page boundary while rotating just changes which
+// page this function computes and draws, and wrapping past the last game
+// back to index 0 lands back on page 0 the same way. A page with fewer than
+// a full page of games left (e.g. GAME_SLOT_6, alone on the last page once
+// a 7th game exists) renders top-aligned in the same fixed-height row
+// slots rather than stretching to fill the screen.
 void showGameMenu(int selectedIndex) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
 
-  const int rowH = OLED_HEIGHT / GAME_COUNT;
+  const int rowH = OLED_HEIGHT / GAME_MENU_ROWS_PER_PAGE;
+  const int totalPages = (GAME_COUNT + GAME_MENU_ROWS_PER_PAGE - 1) / GAME_MENU_ROWS_PER_PAGE;
+  const int page = selectedIndex / GAME_MENU_ROWS_PER_PAGE;
+  const int pageStart = page * GAME_MENU_ROWS_PER_PAGE;
+  int pageEnd = pageStart + GAME_MENU_ROWS_PER_PAGE;
+  if (pageEnd > GAME_COUNT) pageEnd = GAME_COUNT;
 
-  for (int i = 0; i < GAME_COUNT; i++) {
-    int rowTop = i * rowH;
+  // Page dots (if any) eat a few pixels off the right edge - only shrink
+  // the "(soon)" fit budget when they're actually on screen, so single-page
+  // menus keep exactly the margin they always had.
+  const int rightMargin = (totalPages > 1) ? 8 : 2;
+
+  for (int i = pageStart; i < pageEnd; i++) {
+    int rowTop = (i - pageStart) * rowH;
     int textY = rowTop + (rowH - 8) / 2;  // 8 = size-1 glyph height
 
     if (i == selectedIndex) {
@@ -1439,7 +1479,7 @@ void showGameMenu(int selectedIndex) {
       int16_t x1, y1;
       uint16_t w, h;
       display.getTextBounds(withSuffix, 0, textY, &x1, &y1, &w, &h);
-      if (12 + (int)w <= OLED_WIDTH - 2) {
+      if (12 + (int)w <= OLED_WIDTH - rightMargin) {
         strncpy(label, withSuffix, sizeof(label) - 1);
         label[sizeof(label) - 1] = '\0';
       }
@@ -1448,6 +1488,8 @@ void showGameMenu(int selectedIndex) {
     display.setCursor(12, textY);
     display.print(label);
   }
+
+  drawGameMenuPageDots(totalPages, page);
 
   display.display();
 }
@@ -1857,6 +1899,152 @@ void updateSnakeFrame() {
   lastSnakeFrameMs = now;
   stepSnakeGame();
   showSnakeFrame();
+}
+
+// ---- Tetris ----
+// Same "physics/state has zero display code" split as Dino/Whack/Snake -
+// TetrisEngine.cpp never touches `display` directly, and only knows about
+// game-space (row, col) coordinates. This is the one place the 90-degree
+// screen rotation from docs/tetris-implementation-plan.md actually
+// happens: row (the fall axis) maps to physical X (the screen's long
+// 128px axis, more headroom to fall), col (what the encoder shifts) maps
+// to physical Y (the screen's short 64px axis). See that doc's section 1
+// for the full reasoning and an ASCII diagram.
+//
+// The row term is inverted (TETRIS_ROWS-1-row, not row) - that inversion is
+// what actually makes this a clockwise rotation instead of a mirror-image
+// reflection of one. A plain (row,col) -> (X,Y) transpose with neither axis
+// inverted isn't a rotation at all, it's a flip across the diagonal (a
+// rotation plus a mirror) - it happened to still look like *some* rotation
+// on screen, just the wrong-handed one (counter-clockwise), which is what
+// the very first pass at this shipped with. Spawn (row 0) now renders at
+// the panel-side edge and pieces fall toward the encoder side, locking
+// there - the reverse of that first pass, and closer to how real Tetris'
+// side panel usually sits next to the spawn end anyway, not the floor end.
+static void tetrisCellToPx(int row, int col, int& outX, int& outY) {
+  outX = (TETRIS_ROWS - 1 - row) * TETRIS_CELL_PX;
+  outY = TETRIS_COL_ORIGIN_PX + col * TETRIS_CELL_PX;
+}
+
+// 1px inset on every side so adjacent blocks read as distinct squares
+// rather than one solid mass - same "gap as texture" idea as Snake's grid
+// dots, just baked into the block itself instead of a separate pass.
+// Locked cells and the falling piece are drawn identically (no highlight
+// on the falling one) - same as real Tetris, position/motion alone makes
+// it obvious which is which.
+static void drawTetrisCell(int row, int col) {
+  int px, py;
+  tetrisCellToPx(row, col, px, py);
+  display.fillRect(px + 1, py + 1, TETRIS_CELL_PX - 2, TETRIS_CELL_PX - 2, SSD1306_WHITE);
+}
+
+static void drawTetrisBoard(const TetrisSnapshot& snap) {
+  for (int r = 0; r < TETRIS_ROWS; r++) {
+    for (int c = 0; c < TETRIS_COLS; c++) {
+      if (snap.rowMask[r] & (1 << c)) drawTetrisCell(r, c);
+    }
+  }
+  if (snap.pieceActive) {
+    for (int i = 0; i < 4; i++) drawTetrisCell(snap.pieceCells[i].row, snap.pieceCells[i].col);
+  }
+}
+
+// Side panel on the physical-right edge - the current run's score only,
+// same "raw digits, no label" minimalism as Dino/Snake's corner HUDs. Best
+// score is deliberately NOT shown here - every other game in this codebase
+// only surfaces best on the resting game-over card (drawTetrisOverScreen()
+// below), not during live play, and an earlier pass at this broke that
+// convention by showing both live with no label distinguishing them, which
+// just read as "two numbers, which is which?" Dropping back to one number
+// here matches how Dino/Whack/Snake already do it and removes the ambiguity
+// outright instead of trying to label around it in a 20px-wide strip.
+// TETRIS_ROWS/TETRIS_SIDE_PANEL_PX are kept in sync at compile time
+// (Config.h) so this divider always lands exactly on the playfield's edge
+// with no gap or overlap.
+static void drawTetrisPanel(int score) {
+  int panelX = TETRIS_ROWS * TETRIS_CELL_PX;
+  display.drawLine(panelX, 0, panelX, OLED_HEIGHT - 1, SSD1306_WHITE);
+  display.setCursor(panelX + 2, 4);
+  display.print(score);
+}
+
+static void drawTetrisCountdown(const TetrisSnapshot& snap) {
+  const char* word = snap.countdownValue == 2 ? "READY" : (snap.countdownValue == 1 ? "SET" : "GO");
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%s\n%d", word, snap.countdownValue);
+  printCentered(buf, 16, 48, 12);  // same band Dino's countdown uses - clear of the board/panel edges either way
+}
+
+static void drawTetrisPlayScene(const TetrisSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  drawTetrisBoard(snap);
+  drawTetrisPanel(snap.score);
+
+  if (snap.state == TETRIS_COUNTDOWN) {
+    drawTetrisCountdown(snap);
+  }
+  // TETRIS_RUNNING: board + panel only, no overlay.
+
+  display.display();
+}
+
+static void drawTetrisOverScreen(const TetrisSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  char buf[64];
+  snprintf(buf, sizeof(buf), "GAME OVER\n\nscore: %d\nbest: %d\n\npress to retry",
+           snap.score, snap.bestScore);
+  printCentered(buf, 2, OLED_HEIGHT - 2, 9);
+  display.display();
+}
+
+// Frozen play-scene with a blinking "GAME OVER" box over it, same structure
+// as every other game's fatal-flash screen - duplicated rather than shared,
+// same reasoning as those.
+static void drawTetrisOverFlashScene(const TetrisSnapshot& snap) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  drawTetrisBoard(snap);
+  drawTetrisPanel(snap.score);
+
+  bool blinkOn = (millis() / GAME_OVER_FLASH_BLINK_MS) % 2 == 0;
+  if (blinkOn) {
+    const int boxW = 76, boxH = 22;
+    const int boxX = (OLED_WIDTH - boxW) / 2;
+    const int boxY = (OLED_HEIGHT - boxH) / 2;
+    display.fillRect(boxX, boxY, boxW, boxH, SSD1306_BLACK);
+    display.drawRect(boxX, boxY, boxW, boxH, SSD1306_WHITE);
+    printCentered("GAME OVER", boxY, boxY + boxH, 9);
+  }
+
+  display.display();
+}
+
+void showTetrisFrame() {
+  const TetrisSnapshot& snap = getTetrisSnapshot();
+  if (snap.state == TETRIS_OVER) {
+    drawTetrisOverScreen(snap);
+  } else if (snap.state == TETRIS_OVER_FLASH) {
+    drawTetrisOverFlashScene(snap);
+  } else {
+    drawTetrisPlayScene(snap);  // RUNNING or COUNTDOWN
+  }
+}
+
+static unsigned long lastTetrisFrameMs = 0;
+
+void updateTetrisFrame() {
+  unsigned long now = millis();
+  if (now - lastTetrisFrameMs < GAME_FRAME_INTERVAL_MS) return;
+  lastTetrisFrameMs = now;
+  stepTetrisGame();
+  showTetrisFrame();
 }
 
 static char lastNightTimeStr[8] = "";

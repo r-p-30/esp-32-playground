@@ -44,6 +44,20 @@
 #define DAYLIGHT_OFFSET_SEC  0
 
 // ---- Game mode (hidden dino-jump easter egg) ----
+// How many GAMES[] rows the picker menu shows on one screen before paging -
+// see showGameMenu() in DisplayUI.cpp. Independent of GAME_COUNT (Game.h) on
+// purpose: this is a legibility limit (64px tall screen / 4 = a comfortable
+// 16px-tall row), not a count of how many games exist. Once GAME_COUNT grows
+// past this, the menu pages - selectedGame keeps incrementing/wrapping
+// through the flat GAMES[] array exactly as it always did (DeskMate.ino
+// never changes), showGameMenu() just derives which page to draw from
+// selectedIndex / GAME_MENU_ROWS_PER_PAGE. A page past the first with fewer
+// than a full page of games left renders top-aligned (e.g. 2 games shown in
+// the top two row slots, not stretched to fill the screen) rather than
+// resizing rows to fit - keeps every row the same height regardless of
+// which page it's on.
+#define GAME_MENU_ROWS_PER_PAGE   4
+
 // Redraws/physics steps deliberately slow (~10fps) - a faster loop made
 // the jump window too tight to react to on real hardware. The jump arc
 // itself is time-based (millis()), not tied to this interval, so it stays
@@ -179,6 +193,48 @@
 // since there's no word to read, just a number, and the player already
 // knows how to play by this point in the run.
 #define SNAKE_RECOUNTDOWN_PHASE_MS   500UL
+
+// ---- Tetris ----
+// See docs/tetris-implementation-plan.md for the full reasoning, especially
+// section 1 (the 90-degree screen rotation) and section 4 (these two ticks).
+
+// 6px cells - smaller than the first pass (was 8px/8 cols/13 rows), so more
+// grid cells fit in the same physical space. COLS is the shift axis (what
+// the encoder moves) - 10 * 6 = 60 of the 64 screen-height pixels, the
+// leftover 4px is a symmetric 2px margin (TETRIS_COL_ORIGIN_PX below), not
+// a clean divisor like the old 64/8 was. ROWS is the fall axis (gravity) -
+// deliberately NOT screen-width-driven directly, see TETRIS_SIDE_PANEL_PX
+// below.
+#define TETRIS_CELL_PX          6
+#define TETRIS_COLS             10
+// 2px on each side of the COLS axis (64 - 10*6 = 4px leftover, split
+// evenly) - see tetrisCellToPx() in DisplayUI.cpp.
+#define TETRIS_COL_ORIGIN_PX    2
+// Reserved strip on the physical-right edge for the score panel - see plan
+// doc section 1's diagram. 18*6 + 20 = 128 exactly, so ROWS and this
+// constant must be kept in sync if either changes (no runtime check - both
+// are compile-time constants).
+#define TETRIS_SIDE_PANEL_PX    20
+#define TETRIS_ROWS             18   // (128 - TETRIS_SIDE_PANEL_PX) / TETRIS_CELL_PX
+
+// Starting drop pace - still slower than Snake's base (SNAKE_TICK_INTERVAL_MS,
+// 260ms) since a Tetris piece needs room for up to three player actions
+// (shift, shift, rotate) before it locks, not just one steering decision
+// per tick like Snake's turn queue - but every successful shift/rotate
+// resets the fall timer (see tetrisMovePiece()/tetrisRotatePiece() in
+// TetrisEngine.cpp), so the piece isn't just sitting idle between inputs
+// the way this interval alone would suggest. That reset is what actually
+// buys the player their maneuvering room now, which is why this can run
+// faster than the original 650ms pass did.
+#define TETRIS_TICK_INTERVAL_MS   500UL
+// Faster pace once the falling piece crosses TETRIS_MID_ROW (below) - the
+// explicit ask this was built for. Recomputed per-piece, not a permanent
+// switch-over: each newly spawned piece starts back at the slow pace.
+// Also subject to the same move/rotate timer reset as the slow pace above.
+#define TETRIS_TICK_FAST_MS       250UL
+// "Mid screen" along the fall axis - derived from TETRIS_ROWS rather than
+// hardcoded so it stays centered if the row count ever changes.
+#define TETRIS_MID_ROW           (TETRIS_ROWS / 2)
 
 // ---- Remote control (optional - only does anything once RemoteApi.h has
 // real values in it; harmless no-op otherwise) ----

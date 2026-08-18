@@ -53,6 +53,17 @@ void playGameMiss() {
   tone(PIN_BUZZER, 600, 80);
 }
 
+void playGameLineClear(int lines) {
+  // Reuses playGameJump()'s pitch family (high = good), but both frequency
+  // and duration climb with `lines` so 1 vs 4 simultaneous clears are
+  // clearly distinguishable by ear, not just by score change.
+  if (lines < 1) return;
+  if (lines > 4) lines = 4;
+  int freq = 1400 + lines * 200;
+  int dur = 60 + lines * 40;
+  tone(PIN_BUZZER, freq, dur);
+}
+
 void playGameOverAlarm() {
   // Low and sustained, distinct from every other in-game beep (all of
   // which are short and higher-pitched) - reads as "the run is over," not

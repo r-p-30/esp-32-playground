@@ -2,6 +2,7 @@
 #include "GameEngine.h"
 #include "WhackEngine.h"
 #include "SnakeEngine.h"
+#include "TetrisEngine.h"
 #include "DisplayUI.h"
 #include "BuzzerFX.h"
 #include "Config.h"
@@ -190,10 +191,70 @@ static int snakeBestScore() {
   return getSnakeSnapshot().bestScore;
 }
 
-// ---- Not implemented yet ----
-// Selectable in the menu, but `implemented: false` means DeskMate.ino never
-// actually calls these - kept as real no-ops rather than nullptr just so
-// GAMES[] never holds a dangling function pointer.
+// ---- Tetris ----
+// Same wrapper shape as Dino/Whack/Snake above - TetrisEngine.cpp/
+// DisplayUI.cpp own the physics/drawing, this exposes it through the
+// shared Game interface and owns the sound edge-detection (TetrisEngine.cpp
+// has no sound calls in it, same reasoning as the other three engines).
+// Press is fully committed to piece rotation here (per this task's control
+// scheme) rather than doubling as pause, so unlike Snake's onShortPress()
+// there's no toggle-pause branch.
+static TetrisRunState tetrisPrevState = TETRIS_COUNTDOWN;
+static int tetrisPrevLinesCleared = 0;
+
+static void tetrisEnter() {
+  initTetrisGame();
+  tetrisPrevState = TETRIS_COUNTDOWN;
+  tetrisPrevLinesCleared = 0;
+  showTetrisFrame();
+}
+
+static void tetrisStep() {
+  updateTetrisFrame();  // already throttles itself to GAME_FRAME_INTERVAL_MS
+
+  const TetrisSnapshot& snap = getTetrisSnapshot();
+  if (snap.state == TETRIS_OVER_FLASH && tetrisPrevState != TETRIS_OVER_FLASH) {
+    // Topout just happened - alarm rings for the whole flash window, same
+    // as every other game's.
+    playGameOverAlarm();
+  } else if (snap.linesCleared > tetrisPrevLinesCleared) {
+    // A lock just cleared one or more lines - the delta *is* how many
+    // cleared on this lock, same "diff the snapshot" pattern Snake's score
+    // check uses for "food just eaten".
+    playGameLineClear(snap.linesCleared - tetrisPrevLinesCleared);
+  }
+  tetrisPrevState = snap.state;
+  tetrisPrevLinesCleared = snap.linesCleared;
+}
+
+static void tetrisOnShortPress() {
+  if (isTetrisGameOver()) {
+    tetrisRestart();
+    tetrisPrevState = TETRIS_COUNTDOWN;
+    tetrisPrevLinesCleared = 0;
+    showTetrisFrame();
+    return;
+  }
+  tetrisRotatePiece();
+  showTetrisFrame();  // redraw immediately so the rotation is visible right away, same immediacy reasoning as Whack's cursor
+}
+
+static void tetrisOnRotate(int direction) {
+  tetrisMovePiece(direction);
+  showTetrisFrame();  // redraw immediately, same reasoning as Whack's cursor move
+}
+
+static int tetrisBestScore() {
+  return getTetrisSnapshot().bestScore;
+}
+
+// ---- Reserved slots (not implemented yet) ----
+// GAME_SLOT_5/6 (Game.h) - placeholders so the picker menu has more than
+// one page to demonstrate/exercise GAME_MENU_ROWS_PER_PAGE's paging
+// (Config.h/DisplayUI.cpp's showGameMenu()). `implemented: false` means
+// DeskMate.ino never actually calls these - kept as real no-ops rather than
+// nullptr just so GAMES[] never holds a dangling function pointer, same
+// precedent Tetris's own stub used before it existed.
 static void stubEnter() {}
 static void stubStep() {}
 static void stubOnShortPress() {}
@@ -201,8 +262,10 @@ static void stubOnRotate(int direction) { (void)direction; }
 static int stubBestScore() { return 0; }
 
 const Game GAMES[GAME_COUNT] = {
-  { "Dino Jump",    true,  dinoEnter,  dinoStep,  dinoOnShortPress,  dinoOnRotate,  dinoBestScore },
-  { "Whack-a-mole", true,  whackEnter, whackStep, whackOnShortPress, whackOnRotate, whackBestScore },
-  { "Snake",        true,  snakeEnter, snakeStep, snakeOnShortPress, snakeOnRotate, snakeBestScore },
-  { "Tetris",       false, stubEnter,  stubStep,  stubOnShortPress,  stubOnRotate,  stubBestScore },
+  { "Dino Jump",    true,  dinoEnter,   dinoStep,   dinoOnShortPress,   dinoOnRotate,   dinoBestScore },
+  { "Whack-a-mole", true,  whackEnter,  whackStep,  whackOnShortPress,  whackOnRotate,  whackBestScore },
+  { "Snake",        true,  snakeEnter,  snakeStep,  snakeOnShortPress,  snakeOnRotate,  snakeBestScore },
+  { "Tetris",       true,  tetrisEnter, tetrisStep, tetrisOnShortPress, tetrisOnRotate, tetrisBestScore },
+  { "Game 5",       false, stubEnter,   stubStep,   stubOnShortPress,   stubOnRotate,   stubBestScore },
+  { "Game 6",       false, stubEnter,   stubStep,   stubOnShortPress,   stubOnRotate,   stubBestScore },
 };

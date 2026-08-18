@@ -34,3 +34,9 @@ void playGameJump();
 // distinct from playGameJump() (higher, jump = good) so a miss reads as
 // negative feedback without needing a screen change to notice it.
 void playGameMiss();
+
+// Tetris line clear - pitch and duration both scale up with `lines`
+// (1-4 simultaneous), so a multi-line clear reads as more of an event than
+// a single one, per docs/extended-game-plan.md's Tetris feedback note.
+// Non-blocking, same reasoning as playGameJump()/playGameMiss().
+void playGameLineClear(int lines);

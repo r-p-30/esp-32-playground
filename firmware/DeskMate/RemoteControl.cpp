@@ -80,7 +80,9 @@ static int pendingGameModeChange = -1;
 // *RawLastPoll baselines above - it must NOT be treated as a change to act
 // on, or a device reboot/reflash while the site still has an old session's
 // nightModeEnabled/gameModeEnabled: true persisted would immediately
-// re-enter that mode on its own instead of always booting to cards.
+// re-enter that mode on its own instead of always booting to cards. Also
+// used below to guard the one-shot `activeGame` field for the exact same
+// reason - see applyStateJson()'s isFirstStatePoll local.
 static bool firstStatePollSeen = false;
 
 // Expects "wss://host/path" form.
@@ -134,6 +136,13 @@ static TextAlignV parseAlignV(const char* s) {
 static void applyStateJson(const uint8_t* payload, size_t length) {
   StaticJsonDocument<512> doc;
   if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
+
+  // Captured before firstStatePollSeen flips true a few lines down - the
+  // activeGame guard further below needs to know whether *this* call is the
+  // device's first poll since connecting, but by the time execution reaches
+  // it firstStatePollSeen has already been set true by the night/game-mode
+  // edge-detection above it.
+  bool isFirstStatePoll = !firstStatePollSeen;
 
   // Continuous config - applied from every push, independent of whether
   // revision changed (ongoing settings, not events).
@@ -205,12 +214,24 @@ static void applyStateJson(const uint8_t* payload, size_t length) {
     if (!doc["showCard"].isNull()) {
       pendingCardJump = doc["showCard"].as<int>();
     }
-    if (!doc["activeGame"].isNull()) {
+    if (!doc["activeGame"].isNull() && !isFirstStatePoll) {
       // Same one-time-nudge semantics as showCard above, but jumps
       // straight into a specific game (Game.h's GameId index) instead of
       // just opening the on-device picker menu - lets the site both start
       // a game from cards mode and swap the active game while one's
       // already running, without the physical knob's menu-first flow.
+      //
+      // Guarded on !isFirstStatePoll for the same reason
+      // nightModeEnabled/gameModeEnabled are (firstStatePollSeen's
+      // comment): the site only clears `activeGame` back to neutral on the
+      // *next* action after a game was picked (state.py's apply_update()),
+      // not on its own, so it sits there in the persisted state
+      // indefinitely if the device reboots/reflashes right after someone
+      // picked a game from the site. Without this guard that stale value
+      // would replay here on reconnect and launch straight into that game
+      // instead of always starting in cards mode - this was the actual
+      // bug: booting to cards worked fine before, this field just wasn't
+      // covered by the existing guard.
       pendingGameSelect = doc["activeGame"].as<int>();
     }
     if (doc["buzz"] | false) {
