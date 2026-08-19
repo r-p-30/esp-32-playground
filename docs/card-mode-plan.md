@@ -50,7 +50,7 @@ Avoid GPIO 0, 2, 15 (boot-mode pins) and GPIO 6–11 (internal flash) for any cu
 
 ## 3. Cards
 
-**23 total slots**: 22 pre-written content cards, plus 1 reserved custom slot (index 21) that starts empty and can be filled in remotely from the companion site without reflashing (`Cards.h`/`Cards.cpp`).
+**24 total slots**: 23 pre-written content cards, plus 1 reserved custom slot (index 22) that starts empty and can be filled in remotely from the companion site without reflashing (`Cards.h`/`Cards.cpp`).
 
 **Turning the knob** cycles forward/backward through cards, wrapping at both ends, with a short beep on every change. Browsing automatically skips over any still-empty reserved slot, and skips the clock card specifically if no time sync has ever succeeded this boot (`nextVisibleIndex()` — no point landing on a stuck "--:--:--").
 

@@ -28,6 +28,7 @@ enum CardAnimation : uint8_t {
   ANIM_DUCK_FLUSH,
   ANIM_EQUALIZER,  // no press animation - bars move continuously on their own
   ANIM_SNOWFALL,   // no press animation - falling icons keep going continuously, screensaver-style
+  ANIM_BIRTHDAY,   // balloons rise off-screen + confetti falls on press
 };
 
 // Zero-valued members (CENTER/MIDDLE/no corner emoji) intentionally match

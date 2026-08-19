@@ -20,6 +20,7 @@ it as the source of truth alongside the actual code, not this file) and:
 
 - `docs/desk-mate-project-plan.md` — parent/overview plan; also covers WiFi, remote control, deployment, and the PWA setup
 - `docs/card-mode-plan.md` — hardware, wiring, parts list, cards, night mode
+- `docs/firmware-setup.md` — Arduino IDE/arduino-cli toolchain setup for a new machine
 - `docs/remote-api-spec.md` — the exact JSON/WebSocket contract between site and device
 - `docs/site-project-plan.md` — site design notes
 - `docs/game-mode-plan.md` — specs for the game-mode games
@@ -35,8 +36,8 @@ truth when they disagree.
 
 **Firmware** (`firmware/DeskMate/`, Arduino/C++):
 
-- 23 total card slots: **22 pre-written content cards plus 1 reserved
-  custom slot** (index 21) that starts empty and can be filled in
+- 24 total card slots: **23 pre-written content cards plus 1 reserved
+  custom slot** (index 22) that starts empty and can be filled in
   remotely from the site without reflashing.
 - Three button tiers on the rotary encoder (short/long/very-long press,
   500ms/2000ms thresholds in `Config.h`) for animation playback, the

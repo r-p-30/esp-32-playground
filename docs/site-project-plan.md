@@ -11,8 +11,8 @@ The device holds a permanent WebSocket connection to this site (it's USB-powered
 | Feature | Backed by | Notes |
 |---|---|---|
 | Change which card is showing | `showCard` | One-time nudge — you can still turn the knob after |
-| Edit an existing card's text | `cardTextIndex` + `cardText` | Any index except 20 (see below) |
-| Add a new card | `cardTextIndex` + `cardText` targeting 20 | Starts as "-- empty slot --"; only 1 exists, no reflash needed to fill it |
+| Edit an existing card's text | `cardTextIndex` + `cardText` | Any index except 22 (see below) |
+| Add a new card | `cardTextIndex` + `cardText` targeting 22 | Starts as "-- empty slot --"; only 1 exists, no reflash needed to fill it |
 | Tune an animation's timing | `cardAnimationDurationIndex` + `cardAnimationDurationMs` | For testing - no effect on the clock/equalizer cards (no press-animation) |
 | Buzz the device | `buzz` | Distinct 3-beep pattern, separate from the routine navigation beep |
 | Play the current card's animation | `triggerAnimation` | Same animation as a short press, no button needed |
@@ -61,7 +61,7 @@ The site needs to persist one "current state" blob — this is what gets pushed 
 
 Plus, separately (for the UI's own use, not sent to the device): the site should keep its **own copy of all 22 content cards' current text**, so the card manager can show "what's on the device right now" rather than a blank form. The device is the source of truth for what's actually displaying, but the site can't read that back on its own (one-directional, see §6) — mitigated by the device reporting its full card list back once per connect (`cardsReport`, `sendCardsReport()` in `RemoteControl.cpp`), which the site treats as authoritative and resyncs its cache from.
 
-**Card order isn't fixed** — it's just array order in `firmware/DeskMate/Cards.cpp`, and it's already been reordered once during development. The reserved empty slot (index 20 as of this writing) isn't guaranteed to sit at the end — don't assume "reserved slots are the last N indices" anywhere in the site's logic. Pull the current order from `Cards.cpp` directly when building the card manager rather than hardcoding indices from this doc.
+**Card order isn't fixed** — it's just array order in `firmware/DeskMate/Cards.cpp`, and it's already been reordered once during development. The reserved empty slot (index 22 as of this writing) isn't guaranteed to sit at the end — don't assume "reserved slots are the last N indices" anywhere in the site's logic. Pull the current order from `Cards.cpp` directly when building the card manager rather than hardcoding indices from this doc.
 
 ### Important gotcha: one-shot fields need to be cleared, not left sticky
 

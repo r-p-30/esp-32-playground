@@ -106,7 +106,7 @@ static void setNightMode(bool active) {
     // touched by entering night mode, so without this reset here,
     // exiting would redraw the mid-run game screen instead of cards).
     mode = MODE_CARDS;
-    currentCard = 1;  // naturally lands on "good morning"
+    currentCard = 2;  // naturally lands on "good morning" (index shifted by the birthday card ahead of it in Cards.cpp)
     lastCardChangeMs = millis();
     showCurrentMode();
     playChime();
@@ -147,9 +147,10 @@ void setup() {
   syncTime();  // bounded attempt; leaves WiFi connected either way if it succeeds
 
   // Card 0 is the clock - only meaningful once syncTime() actually landed a
-  // real timestamp this boot. Offline (or sync failed), land on card 1
-  // ("good morning") instead so boot never shows a stuck "--:--:--".
-  currentCard = isTimeSynced() ? 0 : 1;
+  // real timestamp this boot. Offline (or sync failed), land on card 2
+  // ("good morning" - index shifted by the birthday card ahead of it in
+  // Cards.cpp) instead so boot never shows a stuck "--:--:--".
+  currentCard = isTimeSynced() ? 0 : 2;
   showCard(currentCard);
   lastCardChangeMs = millis();
 

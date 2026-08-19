@@ -11,6 +11,7 @@ feedback, and — optionally — full remote control from a hosted site.
 - `site/` — the companion Flask site (dashboard + card manager) that remotely controls the device
 - `docs/desk-mate-project-plan.md` — parent/overview plan (also covers WiFi, remote control, deployment, PWA)
 - `docs/card-mode-plan.md` — hardware, wiring, parts list, cards, night mode
+- `docs/firmware-setup.md` — Arduino IDE/arduino-cli toolchain setup for a new machine (board support, libraries, config files)
 - `docs/remote-api-spec.md` — the exact JSON contract the site implements to control the device
 - `docs/site-project-plan.md` — design doc for the companion site
 - `docs/game-mode-plan.md` — specs for the game-mode games
@@ -27,7 +28,7 @@ in `firmware/DeskMate/Config.h`.
 
 ## What it does
 
-**22 content cards** (plus 1 reserved empty slot), each with its own
+**23 content cards** (plus 1 reserved empty slot), each with its own
 short-press animation - except the clock, equalizer, and a falling-icon
 screensaver card, which redraw continuously on their own and ignore
 short-press entirely.
@@ -93,7 +94,7 @@ A small Flask app (mobile-first PWA), deployed and running on Render, with two h
 - **Device-facing** (`/api/state` for manual/debug reads, `/ws/device` for the real permanent connection) — shared-secret auth via `X-Device-Key`, matched against `REMOTE_API_KEY` in the device's `RemoteApi.h`. Served via `gunicorn --worker-class gthread` so the held-open device socket can't block regular page requests.
 - **Human-facing UI** (`/dashboard`) — password-gated login (separate secret from the device key, deliberately, so leaking one doesn't compromise the other).
 
-**Dashboard** (`/dashboard`) is the single page for everything, not a stack of separate forms: buzz / play animation / identify quick actions, carousel config, night/game mode toggles (including picking a specific game to launch), a live status line ("● Connected"/"● Not connected" plus "last seen Ns ago" from the heartbeat) — and the full card editor alongside it. A compact numbered picker (`?edit=<index>`) selects which of the 23 card slots to edit; the form has the text box + 8-shortcode emoji-insert row, alignment controls, 4 corner-emoji pickers, and animation duration, with a **live canvas preview** (128×64, scaled up) that updates as you type — catches overflow/alignment mistakes before they reach the real device. Saving is one combined action (text + alignment + corner emoji + duration, one revision bump), separate from "make active." Desktop shows fields and preview side-by-side sized to fit without page scroll; mobile stacks fields → emoji pickers → preview. Every action shows a flash-message confirmation, so it's never ambiguous whether something saved. (`/cards?edit=<index>` still redirects here — kept only so old bookmarks/links don't break.)
+**Dashboard** (`/dashboard`) is the single page for everything, not a stack of separate forms: buzz / play animation / identify quick actions, carousel config, night/game mode toggles (including picking a specific game to launch), a live status line ("● Connected"/"● Not connected" plus "last seen Ns ago" from the heartbeat) — and the full card editor alongside it. A compact numbered picker (`?edit=<index>`) selects which of the 24 card slots to edit; the form has the text box + 8-shortcode emoji-insert row, alignment controls, 4 corner-emoji pickers, and animation duration, with a **live canvas preview** (128×64, scaled up) that updates as you type — catches overflow/alignment mistakes before they reach the real device. Saving is one combined action (text + alignment + corner emoji + duration, one revision bump), separate from "make active." Desktop shows fields and preview side-by-side sized to fit without page scroll; mobile stacks fields → emoji pickers → preview. Every action shows a flash-message confirmation, so it's never ambiguous whether something saved. (`/cards?edit=<index>` still redirects here — kept only so old bookmarks/links don't break.)
 
 State is persisted via `state.py`; see `site/state.py` for the storage details.
 
@@ -105,11 +106,13 @@ State is persisted via `state.py`; see `site/state.py` for the storage details.
 
 ## Setup (firmware)
 
-1. Install the ESP32 board core + Adafruit SSD1306, Adafruit GFX, ArduinoJson, WiFiManager, and WebSockets (Markus Sattler / `Links2004/arduinoWebSockets`) libraries (Arduino IDE Library Manager, or `arduino-cli lib install`).
-2. **Board setting**: Tools → Partition Scheme → **"Huge APP (3MB No OTA/1MB SPIFFS)"**. The WebSockets library pushes flash usage past the default scheme's limit — this isn't optional. Changing it reshuffles flash layout, so the first flash after switching may force a fresh WiFiManager setup even on a previously-configured board.
-3. Copy `WifiCredentials.example.h` → `WifiCredentials.h` (gitignored, never commit) and fill in a name/password for the temporary WiFiManager setup portal. `WIFI_SSID`/`WIFI_PASSWORD` are optional there too — leave blank to rely on NVS + the portal, or fill them in to bypass the portal entirely on your own network (tried right after the NVS reconnect, before the portal broadcasts — see the three-tier fallback in `connectWiFiAtBootWithSetupFallback()`, `WifiUtil.cpp`).
-4. Optional — copy `RemoteApi.example.h` → `RemoteApi.h` and fill in the site's `wss://` endpoint + the shared `DEVICE_API_KEY` to enable remote control (also gitignored).
-5. Flash `firmware/DeskMate/DeskMate.ino`.
+Full step-by-step (IDE + board support + libraries + arduino-cli equivalent, for a machine that's never built this before): [docs/firmware-setup.md](docs/firmware-setup.md).
+
+Quick version if the toolchain's already set up:
+
+1. Copy `WifiCredentials.example.h` → `WifiCredentials.h` (gitignored, never commit) and fill in a name/password for the temporary WiFiManager setup portal. `WIFI_SSID`/`WIFI_PASSWORD` are optional there too — leave blank to rely on NVS + the portal, or fill them in to bypass the portal entirely on your own network (tried right after the NVS reconnect, before the portal broadcasts — see the three-tier fallback in `connectWiFiAtBootWithSetupFallback()`, `WifiUtil.cpp`).
+2. Optional — copy `RemoteApi.example.h` → `RemoteApi.h` and fill in the site's `wss://` endpoint + the shared `DEVICE_API_KEY` to enable remote control (also gitignored).
+3. Flash `firmware/DeskMate/DeskMate.ino`.
 
 Compile check without the IDE:
 

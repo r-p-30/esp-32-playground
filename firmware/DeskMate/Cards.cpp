@@ -16,13 +16,19 @@
 Card cards[] = {
   // Shown at boot only if syncTime() actually landed a real timestamp this
   // boot (see setup() in DeskMate.ino) - otherwise boot falls back to
-  // card 1 below instead. No press animation - it's a live clock, always
-  // ticking on its own. Also hidden from knob browsing while unsynced
-  // (see isCardVisible() below).
+  // "good morning" (index 2) below instead. No press animation - it's a
+  // live clock, always ticking on its own. Also hidden from knob browsing
+  // while unsynced (see isCardVisible() below).
   { "right now", nullptr, 0, 0, ANIM_CLOCK, true, ANIMATION_DURATION_MS },
 
+  // Longer than the standard duration - there's two things happening at
+  // once (balloons rising, confetti falling) and the default 1000ms
+  // barely gives either room to read before the animation ends.
+  { "HAPPY\nBIRTHDAY", nullptr, 0, 0, ANIM_BIRTHDAY, true, 1800 },
+
   // Boot fallback when card 0 (clock) isn't usable yet - also where
-  // exitNightMode() always lands (see setNightMode() in DeskMate.ino).
+  // exitNightMode() always lands (see setNightMode() in DeskMate.ino;
+  // index shifted from 1 to 2 when the birthday card above was inserted).
   { "good morning", nullptr, 0, 0, ANIM_SUNRISE, true, ANIMATION_DURATION_MS },
 
   { "wake up and\nuse more than\n2 neurons\ntoday :)", nullptr, 0, 0, ANIM_PULSE_BOX, true, ANIMATION_DURATION_MS },

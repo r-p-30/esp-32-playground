@@ -11,6 +11,7 @@ This is the parent/overview plan. It intentionally stays high-level for the card
 
 Related docs outside this card/game split:
 
+- [firmware-setup.md](firmware-setup.md) — Arduino IDE/arduino-cli toolchain setup for a machine that's never built this before (board support, libraries, config files)
 - [remote-api-spec.md](remote-api-spec.md) — the exact JSON/WebSocket contract between the companion site and the device
 - [site-project-plan.md](site-project-plan.md) — design notes for the companion site itself
 

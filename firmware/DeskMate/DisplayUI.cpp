@@ -1149,6 +1149,120 @@ static void drawSnowfall(const Card& card, bool animating, float progress) {
   }
 }
 
+// Fake-bold via double-strike (drawn once, then again 1px right) - this
+// device has no custom/Comic-Sans-style font loaded, just the default
+// Adafruit_GFX glyph set, so this is the standard monochrome-display
+// trick for a bolder look instead of a font that doesn't exist on this
+// hardware. Assumes the caller already set the text size.
+static void drawBoldCentered(const char* line, int y) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(line, 0, y, &x1, &y1, &w, &h);
+  int x = (OLED_WIDTH - (int)w) / 2;
+  if (x < 0) x = 0;
+  display.setCursor(x, y);
+  display.print(line);
+  display.setCursor(x + 1, y);
+  display.print(line);
+}
+
+// Outline body (this task's explicit ask - a hollow "doodle" sketch look,
+// not a filled shape) + small filled knot + a short wavy (zigzag) string
+// dangling below.
+static void drawBalloon(int cx, int cy, int r) {
+  display.drawCircle(cx, cy, r, SSD1306_WHITE);
+  int knotY = cy + r;
+  display.fillTriangle(cx - 1, knotY, cx + 1, knotY, cx, knotY + 2, SSD1306_WHITE);
+  int sy = knotY + 2;
+  display.drawLine(cx, sy, cx - 2, sy + 2, SSD1306_WHITE);
+  display.drawLine(cx - 2, sy + 2, cx + 1, sy + 4, SSD1306_WHITE);
+}
+
+static void drawBirthdayBalloons(const Card& card, bool animating, float progress) {
+  // Bold caption (drawBoldCentered()'s double-strike trick), split on the
+  // first '\n' into two lines (falls back to one centered line if
+  // remotely edited to drop the newline) - reads card.text like every
+  // other card here, rather than hardcoding the words, so a remote text
+  // edit still shows up.
+  //
+  // Text size 1 - GFX's setTextSize() only takes integer multipliers, so
+  // there's no true 0.75x available; 1 (half of an earlier size-2 pass)
+  // is the closest smaller option this library actually supports. Also
+  // not a Comic-Sans-style font - this device has no custom font loaded
+  // at all, just the default Adafruit_GFX glyph set (see
+  // drawBoldCentered()'s comment).
+  //
+  // Centered both horizontally (drawBoldCentered()) and vertically here -
+  // against the full OLED_HEIGHT, not a top band, so the caption sits in
+  // the true middle of the screen rather than pinned near the top.
+  const int lineH = 9;
+  const char* nl = strchr(card.text, '\n');
+  if (nl) {
+    char line1[24];
+    int len = (int)(nl - card.text);
+    if (len > (int)sizeof(line1) - 1) len = (int)sizeof(line1) - 1;
+    memcpy(line1, card.text, len);
+    line1[len] = '\0';
+    int yTop = (OLED_HEIGHT - lineH * 2) / 2;
+    if (yTop < 0) yTop = 0;
+    drawBoldCentered(line1, yTop);
+    drawBoldCentered(nl + 1, yTop + lineH);
+  } else {
+    int yTop = (OLED_HEIGHT - lineH) / 2;
+    if (yTop < 0) yTop = 0;
+    drawBoldCentered(card.text, yTop);
+  }
+
+  // 4 balloons at fixed, hand-picked scattered points (this task's
+  // explicit ask - not evenly spaced along one row), with empty space
+  // between them rather than clustering. Idle: sitting at rest.
+  // Animating: rise together - each a slightly different amount so they
+  // don't lift in robotic lockstep - and shrink a touch, like they've
+  // just been let go and are floating up and away.
+  static const int baseX[4] = { 16, 98, 48, 112 };
+  static const int baseY[4] = { 38, 36, 50, 52 };
+  for (int i = 0; i < 4; i++) {
+    int rise = animating ? (int)(progress * (30 + i * 4)) : 0;
+    int r = animating ? (5 - (int)(progress * 2)) : 5;
+    if (r < 2) r = 2;
+    drawBalloon(baseX[i], baseY[i] - rise, r);
+  }
+
+  if (!animating) return;
+
+  // The shared permanent frame itself blinks while animating - see the
+  // ANIM_BIRTHDAY special case in drawCardFrame() below, right where that
+  // frame is actually drawn. Not handled here: this function draws before
+  // the frame does, so there's nothing to toggle from this side.
+
+  // Confetti falling from the top - continuous for the whole animation
+  // (not a one-shot burst): each piece's phase wraps via fmodf(), so it
+  // loops back to the top and falls again several times over the
+  // animation's ~1.8s duration instead of making just one pass, same
+  // "millis()-driven continuous fall" idea as ANIM_SNOWFALL but
+  // phase-driven off this animation's own progress rather than
+  // persistent per-particle state. Small line flecks (a speck/short
+  // line, not a filled dot), alternating orientation per piece so they
+  // don't all read identically.
+  //
+  // confettiX is a deliberately shuffled (not ascending) list, not
+  // derived from `i` the way the fall phase below is - with both x and
+  // phase increasing together in lockstep with `i`, every piece lines up
+  // in a single moving diagonal streak instead of scattered rain. Reading
+  // x from an unrelated order breaks that correlation.
+  static const int confettiX[9] = { 70, 14, 108, 40, 92, 6, 122, 56, 26 };
+  for (int i = 0; i < 9; i++) {
+    float cyclePos = fmodf(progress * 3.0f + (float)i / 9.0f, 1.0f);
+    int cx = confettiX[i];
+    int cy = (int)(cyclePos * (OLED_HEIGHT + 16)) - 8;
+    if (i % 2 == 0) {
+      display.drawLine(cx, cy, cx + 2, cy, SSD1306_WHITE);
+    } else {
+      display.drawLine(cx, cy, cx + 1, cy + 2, SSD1306_WHITE);
+    }
+  }
+}
+
 static void drawBounce(const Card& card, bool animating, float progress) {
   printAligned(card.text, card.alignH, card.alignV, 4, OLED_WIDTH - 4, 0, OLED_HEIGHT, 9,
                animating, progress, card.animatedEmojiDisableMask);
@@ -1195,14 +1309,25 @@ static void drawCardFrame(int index, bool animating, float progress) {
     case ANIM_EQUALIZER:     drawEqualizer(card, animating, progress); break;
     case ANIM_DUCK_FLUSH:    drawDuckFlush(card, animating, progress); break;
     case ANIM_SNOWFALL:      drawSnowfall(card, animating, progress); break;
+    case ANIM_BIRTHDAY:      drawBirthdayBalloons(card, animating, progress); break;
     case ANIM_BOUNCE:
     default:                 drawBounce(card, animating, progress); break;
   }
 
   // Permanent frame around every card, regardless of animation state -
   // except the snowfall screensaver, which is meant to read as an
-  // edge-to-edge ambient effect rather than another framed card.
-  if (card.animation != ANIM_SNOWFALL) {
+  // edge-to-edge ambient effect rather than another framed card, and the
+  // birthday card while animating, which blinks this same frame on/off
+  // (this task's explicit ask - flicker the one existing border, not
+  // layer a second one on top) rather than drawing it solid throughout,
+  // same on/off blink shape as drawBounce()'s border-flash.
+  bool skipFrame = card.animation == ANIM_SNOWFALL;
+  bool blinkFrameOff = false;
+  if (card.animation == ANIM_BIRTHDAY && animating) {
+    float phase = fmodf(progress * 6.0f, 1.0f);
+    blinkFrameOff = phase >= 0.5f;
+  }
+  if (!skipFrame && !blinkFrameOff) {
     display.drawRect(0, 0, OLED_WIDTH, OLED_HEIGHT, SSD1306_WHITE);
   }
 
